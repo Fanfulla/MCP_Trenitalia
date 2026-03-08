@@ -151,6 +151,7 @@ def _journeys_between(
     b_up = stazione_b.strip().upper()
 
     risultati = []
+    seen: set[tuple[str, str]] = set()  # (numero, dep_a) per evitare duplicati NeTEx
 
     for j in _TIMETABLE:
         # Filtro giorno della settimana + periodo validità
@@ -181,6 +182,11 @@ def _journeys_between(
 
         # Fermate intermedie (escluse A e B)
         intermedie = [s[0].title() for s in stops[idx_a+1:idx_b]]
+
+        key = (j["n"], dep_a)
+        if key in seen:
+            continue
+        seen.add(key)
 
         risultati.append({
             "numero": j["n"],
