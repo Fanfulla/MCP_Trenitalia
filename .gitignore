@@ -4,3 +4,4 @@ __pycache__/
 *.pyo
 .env
 IT-IT-TRENITALIA_L1.xml.gz
+.claude/
