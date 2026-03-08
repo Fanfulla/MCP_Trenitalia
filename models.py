@@ -145,6 +145,14 @@ class OrariTraStazioniInput(BaseModel):
         default=None,
         description="Orario minimo di partenza da stazione_a (formato HH:MM, es. '17:30'). Default: ora attuale.",
     )
+    data: Optional[str] = Field(
+        default=None,
+        description=(
+            "Data per cui cercare i treni (formato YYYY-MM-DD, es. '2026-03-09'). "
+            "Default: oggi. Usare questo campo quando l'utente chiede 'domani', "
+            "dopodomani o un giorno specifico."
+        ),
+    )
     limite: Optional[int] = Field(
         default=10,
         description="Numero massimo di treni da mostrare (default 10, max 30)",
@@ -162,4 +170,16 @@ class OrariTraStazioniInput(BaseModel):
             datetime.strptime(v, "%H:%M")
         except (ValueError, ImportError):
             raise ValueError("Formato orario non valido. Usa HH:MM (es. '17:30').")
+        return v
+
+    @field_validator("data")
+    @classmethod
+    def validate_data(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except (ValueError, ImportError):
+            raise ValueError("Formato data non valido. Usa YYYY-MM-DD (es. '2026-03-09').")
         return v

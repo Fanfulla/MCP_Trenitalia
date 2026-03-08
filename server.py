@@ -133,17 +133,18 @@ def _journeys_between(
     stazione_b: str,
     orario_da: str = "00:00",
     solo_oggi: bool = True,
+    data: date | None = None,
 ) -> list[dict]:
     """
     Cerca nell'orario NeTEx tutte le corse che:
     - fermano a stazione_a E poi a stazione_b (in quell'ordine)
     - partono da stazione_a non prima di orario_da (HH:MM)
-    - circolano oggi (se solo_oggi=True)
+    - circolano nel giorno indicato da data (default: oggi)
 
     Restituisce lista di dict:
       { numero, linea, dep_a, arr_b, fermate_intermedie }
     """
-    oggi = date.today()
+    oggi = data or date.today()
     oggi_weekday = oggi.weekday()  # 0=Mon, 6=Sun
     oggi_str = oggi.isoformat()
 
@@ -702,7 +703,14 @@ async def trenitalia_orari_tra_stazioni(params: OrariTraStazioniInput) -> str:
         nome_a = _resolve_name(params.stazione_a)
         nome_b = _resolve_name(params.stazione_b)
 
-        orario_da = params.orario_da or datetime.now().strftime("%H:%M")
+        # Risolvi la data: usa params.data se fornita, altrimenti oggi
+        if params.data:
+            from datetime import date as _date
+            data_query = _date.fromisoformat(params.data)
+        else:
+            data_query = date.today()
+
+        orario_da = params.orario_da or (datetime.now().strftime("%H:%M") if data_query == date.today() else "00:00")
 
         ms_oggi = str(int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000))
         _VT_BASE = "http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno"
@@ -727,7 +735,7 @@ async def trenitalia_orari_tra_stazioni(params: OrariTraStazioniInput) -> str:
                 return "–"
 
         # ── Fonte primaria: NeTEx offline ─────────────────────────────────────
-        corse = _journeys_between(nome_a, nome_b, orario_da=orario_da)
+        corse = _journeys_between(nome_a, nome_b, orario_da=orario_da, data=data_query)
         fonte = "NeTEx"
 
         # ── Fallback: Viaggiatreno real-time (treni extra-orario / post-NeTEx) ─
@@ -833,9 +841,10 @@ async def trenitalia_orari_tra_stazioni(params: OrariTraStazioniInput) -> str:
         async with httpx.AsyncClient(timeout=httpx.Timeout(6.0), headers=_VT_HEADERS) as client:
             ritardi = await _asyncio.gather(*[_fetch_ritardo(client, c["numero"]) for c in corse])
 
+        data_label = data_query.strftime("%A %d/%m/%Y")
         righe = [
             f"## 🚆 Treni da **{nome_a.title()}** a **{nome_b.title()}**\n",
-            f"_Orario teorico NeTEx + ritardo real-time Viaggiatreno — da {orario_da}_\n",
+            f"_Orario teorico NeTEx + ritardo real-time Viaggiatreno — {data_label} dalle {orario_da}_\n",
             "| Treno | Linea | Part. da A | Arr. a B | Ritardo | Fermate intermedie |",
             "|---|---|---|---|---|---|",
         ]
