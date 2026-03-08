@@ -699,20 +699,11 @@ async def trenitalia_orari_tra_stazioni(params: OrariTraStazioniInput) -> str:
 
         orario_da = params.orario_da or datetime.now().strftime("%H:%M")
 
-        corse = _journeys_between(nome_a, nome_b, orario_da=orario_da)
-
-        if not corse:
-            return (
-                f"Nessun treno trovato da **{nome_a.title()}** a **{nome_b.title()}** "
-                f"dopo le {orario_da} oggi.\n"
-                "Verifica i nomi delle stazioni o prova con un orario precedente."
-            )
-
-        corse = corse[: params.limite]
-
         ms_oggi = str(int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000))
         _VT_BASE = "http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno"
         _VT_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; trenitalia-mcp/1.0)"}
+
+        import asyncio as _asyncio
 
         async def _fetch_ritardo(client: httpx.AsyncClient, numero: str) -> str:
             """Recupera il ritardo real-time per un numero treno. Restituisce stringa."""
@@ -730,9 +721,111 @@ async def trenitalia_orari_tra_stazioni(params: OrariTraStazioniInput) -> str:
             except Exception:
                 return "–"
 
+        # ── Fonte primaria: NeTEx offline ─────────────────────────────────────
+        corse = _journeys_between(nome_a, nome_b, orario_da=orario_da)
+        fonte = "NeTEx"
+
+        # ── Fallback: Viaggiatreno real-time (treni extra-orario / post-NeTEx) ─
+        if not corse:
+            risolto_a = _resolve_stazione(params.stazione_a)
+            if isinstance(risolto_a, tuple):
+                id_a, _ = risolto_a
+                try:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(8.0), headers=_VT_HEADERS) as client:
+                        treni_rt = await get_partenze(id_a, _orario_viaggiatreno())
+
+                        async def _check_ferma_a_b(client: httpx.AsyncClient, t: dict) -> dict | None:
+                            numero = _safe_str(t.get("numeroTreno", ""))
+                            cod_orig = _safe_str(t.get("codOrigine", ""))
+                            if not numero or not cod_orig:
+                                return None
+                            try:
+                                at = await client.get(
+                                    f"{_VT_BASE}/andamentoTreno/{cod_orig}/{numero}/{ms_oggi}"
+                                )
+                                if at.status_code != 200:
+                                    return None
+                                dati = at.json()
+                                fermate = dati.get("fermate") or []
+                                nomi = [_safe_str(f.get("stazione", "")).upper() for f in fermate]
+
+                                # Trova posizione di A e B nel percorso reale
+                                idx_a = next((i for i, n in enumerate(nomi) if nome_a in n), -1)
+                                idx_b = next((i for i, n in enumerate(nomi) if i > idx_a and nome_b in n), -1)
+                                if idx_a == -1 or idx_b == -1:
+                                    return None
+
+                                dep_a_ms = fermate[idx_a].get("partenza_teorica") or fermate[idx_a].get("arrivo_teorico")
+                                arr_b_ms = fermate[idx_b].get("arrivo_teorico") or fermate[idx_b].get("partenza_teorica")
+
+                                def _ms_to_hm(v: Any) -> str:
+                                    s = _safe_str(v)
+                                    if s.isdigit() and int(s) > 0:
+                                        return datetime.fromtimestamp(int(s) / 1000).strftime("%H:%M")
+                                    return "–"
+
+                                dep_a = _ms_to_hm(dep_a_ms)
+                                arr_b = _ms_to_hm(arr_b_ms)
+
+                                if dep_a < orario_da:
+                                    return None
+
+                                intermedie = [
+                                    fermate[i].get("stazione", "").title()
+                                    for i in range(idx_a + 1, idx_b)
+                                ]
+                                ritardo = _format_ritardo(_safe_int(dati.get("ritardo"), default=-99))
+                                categoria = _safe_str(dati.get("categoriaDescrizione") or t.get("categoriaDescrizione", "REG"))
+
+                                return {
+                                    "numero": numero,
+                                    "linea": categoria,
+                                    "dep_a": dep_a,
+                                    "arr_b": arr_b,
+                                    "intermedie": intermedie,
+                                    "ritardo": ritardo,
+                                }
+                            except Exception:
+                                return None
+
+                        risultati = await _asyncio.gather(
+                            *[_check_ferma_a_b(client, t) for t in treni_rt]
+                        )
+                        corse_rt = sorted(
+                            [r for r in risultati if r is not None],
+                            key=lambda x: x["dep_a"],
+                        )
+
+                        if corse_rt:
+                            corse_rt = corse_rt[: params.limite]
+                            righe = [
+                                f"## 🚆 Treni da **{nome_a.title()}** a **{nome_b.title()}**\n",
+                                f"_Dati real-time Viaggiatreno (treno non presente nel NeTEx) — da {orario_da}_\n",
+                                "| Treno | Linea | Part. da A | Arr. a B | Ritardo | Fermate intermedie |",
+                                "|---|---|---|---|---|---|",
+                            ]
+                            for c in corse_rt:
+                                intermedie_str = ", ".join(c["intermedie"]) if c["intermedie"] else "–"
+                                righe.append(
+                                    f"| **{c['numero']}** | {c['linea']} "
+                                    f"| {c['dep_a']} | {c['arr_b']} "
+                                    f"| {c['ritardo']} | {intermedie_str} |"
+                                )
+                            return "\n".join(righe)
+
+                except Exception:
+                    pass
+
+            return (
+                f"Nessun treno trovato da **{nome_a.title()}** a **{nome_b.title()}** "
+                f"dopo le {orario_da} oggi, né nel NeTEx né in Viaggiatreno real-time.\n"
+                "Verifica i nomi delle stazioni o prova con un orario precedente."
+            )
+
+        corse = corse[: params.limite]
+
         # Tutte le chiamate real-time in parallelo
         async with httpx.AsyncClient(timeout=httpx.Timeout(6.0), headers=_VT_HEADERS) as client:
-            import asyncio as _asyncio
             ritardi = await _asyncio.gather(*[_fetch_ritardo(client, c["numero"]) for c in corse])
 
         righe = [
