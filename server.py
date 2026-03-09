@@ -204,6 +204,7 @@ def _journeys_between(
 
 mcp = FastMCP(
     "trenitalia_mcp",
+    streamable_http_path="/",
     instructions=(
         "Server MCP per dati ferroviari italiani in tempo reale via Viaggiatreno. "
         "Flusso d'uso consigliato: 1) usa trenitalia_cerca_stazione per trovare l'ID stazione, "
