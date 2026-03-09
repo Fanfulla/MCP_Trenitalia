@@ -904,13 +904,13 @@ if __name__ == "__main__":
     import sys
 
     if "--http" in sys.argv:
-        # Deploy remoto: avvia come server HTTP su porta 8000
-        # Configurabile con variabile PORT
+        # Deploy remoto: streamable-http (compatibile Claude.ai web)
+        # Espone endpoint /mcp — configurabile con variabile PORT
         import os
         import uvicorn
         port = int(os.environ.get("PORT", 8000))
-        print(f"[trenitalia_mcp] Avvio in modalità SSE su porta {port}", file=sys.stderr)
-        uvicorn.run(mcp.sse_app(), host="0.0.0.0", port=port)
+        print(f"[trenitalia_mcp] Avvio in modalità streamable-http su porta {port}", file=sys.stderr)
+        uvicorn.run(mcp.streamable_http_app(), host="0.0.0.0", port=port)
     else:
         # Default: stdio (per Claude Desktop, Cursor, ecc.)
         mcp.run()
