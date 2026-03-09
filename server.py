@@ -738,6 +738,26 @@ async def trenitalia_orari_tra_stazioni(params: OrariTraStazioniInput) -> str:
         corse = _journeys_between(nome_a, nome_b, orario_da=orario_da, data=data_query)
         fonte = "NeTEx"
 
+        # ── Cross-check live: rimuove treni NeTEx che non fermano davvero oggi ─
+        # Solo per query odierne (la bacheca live non copre giorni futuri)
+        if corse and data_query == date.today():
+            risolto_a = _resolve_stazione(params.stazione_a)
+            if isinstance(risolto_a, tuple):
+                id_a, _ = risolto_a
+                try:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0), headers=_VT_HEADERS) as cl:
+                        partenze_live = await get_partenze(id_a, _orario_viaggiatreno())
+                    if partenze_live:
+                        numeri_live = {_safe_str(t.get("numeroTreno", "")) for t in partenze_live}
+                        corse_verificate = [c for c in corse if c["numero"] in numeri_live]
+                        # Usa il filtro solo se ha senso (almeno 1 treno confermato o orario_da recente)
+                        # Se 0 confermati potrebbero essere tutti fuori finestra live → non filtrare
+                        if corse_verificate:
+                            corse = corse_verificate
+                            fonte = "NeTEx+live"
+                except Exception:
+                    pass  # Live non disponibile: usa NeTEx senza filtro
+
         # ── Fallback: Viaggiatreno real-time (treni extra-orario / post-NeTEx) ─
         if not corse:
             risolto_a = _resolve_stazione(params.stazione_a)
@@ -842,9 +862,10 @@ async def trenitalia_orari_tra_stazioni(params: OrariTraStazioniInput) -> str:
             ritardi = await _asyncio.gather(*[_fetch_ritardo(client, c["numero"]) for c in corse])
 
         data_label = data_query.strftime("%A %d/%m/%Y")
+        fonte_label = "NeTEx verificato live + ritardo real-time" if fonte == "NeTEx+live" else "Orario teorico NeTEx + ritardo real-time"
         righe = [
             f"## 🚆 Treni da **{nome_a.title()}** a **{nome_b.title()}**\n",
-            f"_Orario teorico NeTEx + ritardo real-time Viaggiatreno — {data_label} dalle {orario_da}_\n",
+            f"_{fonte_label} — {data_label} dalle {orario_da}_\n",
             "| Treno | Linea | Part. da A | Arr. a B | Ritardo | Fermate intermedie |",
             "|---|---|---|---|---|---|",
         ]
