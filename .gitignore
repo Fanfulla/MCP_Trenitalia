@@ -5,3 +5,5 @@ __pycache__/
 .env
 IT-IT-TRENITALIA_L1.xml.gz
 .claude/
+CLAUDE.md
+docs/
