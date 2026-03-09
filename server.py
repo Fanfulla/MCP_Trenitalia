@@ -739,7 +739,9 @@ async def trenitalia_orari_tra_stazioni(params: OrariTraStazioniInput) -> str:
         fonte = "NeTEx"
 
         # ── Cross-check live: rimuove treni NeTEx che non fermano davvero oggi ─
-        # Solo per query odierne (la bacheca live non copre giorni futuri)
+        # Solo per query odierne (la bacheca live non copre giorni futuri).
+        # La bacheca live copre circa 90 minuti da ora: filtriamo solo i treni
+        # che rientrano in quella finestra; quelli oltre vengono tenuti da NeTEx.
         if corse and data_query == date.today():
             risolto_a = _resolve_stazione(params.stazione_a)
             if isinstance(risolto_a, tuple):
@@ -749,11 +751,23 @@ async def trenitalia_orari_tra_stazioni(params: OrariTraStazioniInput) -> str:
                         partenze_live = await get_partenze(id_a, _orario_viaggiatreno())
                     if partenze_live:
                         numeri_live = {_safe_str(t.get("numeroTreno", "")) for t in partenze_live}
-                        corse_verificate = [c for c in corse if c["numero"] in numeri_live]
-                        # Usa il filtro solo se ha senso (almeno 1 treno confermato o orario_da recente)
-                        # Se 0 confermati potrebbero essere tutti fuori finestra live → non filtrare
-                        if corse_verificate:
-                            corse = corse_verificate
+                        # Finestra live: ora + 90 min (formato HH:MM per confronto stringa)
+                        from datetime import timedelta
+                        ora_fine_live = (datetime.now() + timedelta(minutes=90)).strftime("%H:%M")
+                        corse_filtrate = []
+                        rimossi = 0
+                        for c in corse:
+                            if c["dep_a"] <= ora_fine_live:
+                                # Nella finestra live → cross-check
+                                if c["numero"] in numeri_live:
+                                    corse_filtrate.append(c)
+                                else:
+                                    rimossi += 1  # fantasma NeTEx, non ferma davvero qui
+                            else:
+                                # Oltre la finestra live → tieni dal NeTEx senza filtrare
+                                corse_filtrate.append(c)
+                        if rimossi > 0:
+                            corse = corse_filtrate
                             fonte = "NeTEx+live"
                 except Exception:
                     pass  # Live non disponibile: usa NeTEx senza filtro
