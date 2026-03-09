@@ -202,8 +202,12 @@ def _journeys_between(
 
 # ─── Inizializzazione ─────────────────────────────────────────────────────────
 
+import os as _os
+
 mcp = FastMCP(
     "trenitalia_mcp",
+    host="0.0.0.0",
+    port=int(_os.environ.get("PORT", 8000)),
     instructions=(
         "Server MCP per dati ferroviari italiani in tempo reale via Viaggiatreno. "
         "Flusso d'uso consigliato: 1) usa trenitalia_cerca_stazione per trovare l'ID stazione, "
@@ -905,38 +909,13 @@ if __name__ == "__main__":
 
     if "--http" in sys.argv:
         # Deploy remoto: streamable-http (compatibile Claude.ai web)
-        # Espone /mcp per MCP + /.well-known/* per OAuth discovery (no-auth)
+        # host/port configurati nel costruttore FastMCP via variabile PORT
         import os
-        import uvicorn
-        from starlette.applications import Starlette
-        from starlette.responses import JSONResponse
-        from starlette.routing import Mount, Route
-
         port = int(os.environ.get("PORT", 8000))
-        public_url = os.environ.get("RAILWAY_PUBLIC_DOMAIN", f"http://localhost:{port}")
-        if not public_url.startswith("http"):
-            public_url = f"https://{public_url}"
-
-        async def oauth_protected_resource(request):
-            """Segnala a Claude.ai che il server non richiede autenticazione."""
-            return JSONResponse({"resource": public_url, "authorization_servers": []})
-
-        async def oauth_authorization_server(request):
-            return JSONResponse({"issuer": public_url, "response_types_supported": []}, status_code=200)
-
-        async def register(request):
-            return JSONResponse({"error": "registration_not_supported"}, status_code=400)
-
-        app = Starlette(routes=[
-            Route("/.well-known/oauth-protected-resource", oauth_protected_resource),
-            Route("/.well-known/oauth-authorization-server", oauth_authorization_server),
-            Route("/register", register, methods=["POST"]),
-            Mount("/", mcp.streamable_http_app()),
-        ])
-
-        print(f"[trenitalia_mcp] Avvio in modalità streamable-http su porta {port}", file=sys.stderr)
-        print(f"[trenitalia_mcp] MCP endpoint: {public_url}/mcp", file=sys.stderr)
-        uvicorn.run(app, host="0.0.0.0", port=port)
+        public_url = os.environ.get("RAILWAY_PUBLIC_DOMAIN", f"localhost:{port}")
+        print(f"[trenitalia_mcp] Avvio streamable-http su porta {port}", file=sys.stderr)
+        print(f"[trenitalia_mcp] MCP endpoint: https://{public_url}/mcp", file=sys.stderr)
+        mcp.run(transport="streamable-http")
     else:
         # Default: stdio (per Claude Desktop, Cursor, ecc.)
         mcp.run()
