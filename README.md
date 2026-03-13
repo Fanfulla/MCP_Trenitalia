@@ -1,6 +1,6 @@
 # MCP Trenitalia
 
-Server **MCP (Model Context Protocol)** per dati ferroviari italiani in tempo reale, costruito con [FastMCP](https://github.com/jlowin/fastmcp) e le API non ufficiali di **Viaggiatreno** (Trenitalia).
+Server **MCP (Model Context Protocol)** per dati ferroviari italiani (Trenitalia) in tempo reale, costruito con [FastMCP](https://github.com/jlowin/fastmcp) e le API non ufficiali di **Viaggiatreno** (Trenitalia).
 
 Permette a modelli LLM come Claude di rispondere a domande sui treni italiani in linguaggio naturale: orari, ritardi, partenze, arrivi, tracciamento in tempo reale.
 
