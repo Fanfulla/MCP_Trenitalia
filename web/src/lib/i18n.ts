@@ -10,7 +10,7 @@ export const translations = {
     },
     hero: {
       badge: "Open Source — MCP Server",
-      title: "Treni italiani in tempo reale.",
+      title: "I tuoi treni in tempo reale.",
       titleAccent: "Per la tua AI.",
       subtitle:
         "Server MCP che permette a Claude e altri LLM di rispondere a domande sui treni italiani: orari, ritardi, partenze, arrivi e tracciamento live.",
@@ -134,7 +134,7 @@ export const translations = {
     },
     hero: {
       badge: "Open Source — MCP Server",
-      title: "Italian trains in real time.",
+      title: "Your trains in real time.",
       titleAccent: "For your AI.",
       subtitle:
         "MCP Server that lets Claude and other LLMs answer questions about Italian trains: schedules, delays, departures, arrivals, and live tracking.",
