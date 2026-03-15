@@ -505,11 +505,11 @@ export default function Home() {
               <a href="#features" className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-1.5 transition-all">
                 {t.nav.features}
               </a>
-              <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-1.5 transition-all">
-                {t.nav.howItWorks}
-              </a>
               <a href="#demo" className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-1.5 transition-all">
                 {t.nav.demo}
+              </a>
+              <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-1.5 transition-all">
+                {t.nav.howItWorks}
               </a>
 
               <div className="w-px h-5 bg-border/60 dark:bg-white/[0.08] mx-1.5" />
@@ -581,11 +581,11 @@ export default function Home() {
                   <a href="#features" onClick={() => setMobileMenuOpen(false)} className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-2 transition-all">
                     {t.nav.features}
                   </a>
-                  <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-2 transition-all">
-                    {t.nav.howItWorks}
-                  </a>
                   <a href="#demo" onClick={() => setMobileMenuOpen(false)} className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-2 transition-all">
                     {t.nav.demo}
+                  </a>
+                  <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-2 transition-all">
+                    {t.nav.howItWorks}
                   </a>
                   <a
                     href="https://github.com/Fanfulla/MCP_Trenitalia"
