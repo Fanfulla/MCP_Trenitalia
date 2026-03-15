@@ -5,6 +5,7 @@ export const translations = {
     nav: {
       features: "Funzionalità",
       howItWorks: "Come funziona",
+      demo: "Demo",
       getStarted: "Inizia",
     },
     hero: {
@@ -99,6 +100,16 @@ export const translations = {
         { name: "Viaggiatreno", description: "API real-time" },
       ],
     },
+    demo: {
+      eyebrow: "In Azione",
+      title: "Guarda come funziona",
+      subtitle: "Demo reali dell'MCP Server in azione su Claude Desktop e mobile.",
+      videos: [
+        { src: "/videos/demo-desktop-1.mp4", label: "Claude Desktop — Ricerca treni" },
+        { src: "/videos/demo-desktop-2.mp4", label: "Claude Desktop — Tracciamento live" },
+        { src: "/videos/demo-mobile.mp4", label: "Claude Mobile — Partenze" },
+      ],
+    },
     cta: {
       title: "Pronto a provarlo?",
       subtitle:
@@ -118,6 +129,7 @@ export const translations = {
     nav: {
       features: "Features",
       howItWorks: "How it works",
+      demo: "Demo",
       getStarted: "Get Started",
     },
     hero: {
@@ -210,6 +222,16 @@ export const translations = {
         { name: "Pydantic v2", description: "Input validation" },
         { name: "NeTEx", description: "Offline timetable" },
         { name: "Viaggiatreno", description: "Real-time API" },
+      ],
+    },
+    demo: {
+      eyebrow: "In Action",
+      title: "See it in action",
+      subtitle: "Real demos of the MCP Server running on Claude Desktop and mobile.",
+      videos: [
+        { src: "/videos/demo-desktop-1.mp4", label: "Claude Desktop — Train Search" },
+        { src: "/videos/demo-desktop-2.mp4", label: "Claude Desktop — Live Tracking" },
+        { src: "/videos/demo-mobile.mp4", label: "Claude Mobile — Departures" },
       ],
     },
     cta: {

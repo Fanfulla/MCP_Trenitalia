@@ -25,6 +25,7 @@ import {
   Moon,
   Copy,
   Check,
+  Play,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -464,6 +465,7 @@ function InstallTerminal({ locale }: { locale: Locale }) {
 export default function Home() {
   const [locale, setLocale] = useState<Locale>("it");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeVideo, setActiveVideo] = useState(0);
   const { theme, toggle: toggleTheme } = useTheme();
   const t = translations[locale];
 
@@ -505,6 +507,9 @@ export default function Home() {
               </a>
               <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-1.5 transition-all">
                 {t.nav.howItWorks}
+              </a>
+              <a href="#demo" className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-1.5 transition-all">
+                {t.nav.demo}
               </a>
 
               <div className="w-px h-5 bg-border/60 dark:bg-white/[0.08] mx-1.5" />
@@ -578,6 +583,9 @@ export default function Home() {
                   </a>
                   <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-2 transition-all">
                     {t.nav.howItWorks}
+                  </a>
+                  <a href="#demo" onClick={() => setMobileMenuOpen(false)} className="text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] rounded-lg px-3 py-2 transition-all">
+                    {t.nav.demo}
                   </a>
                   <a
                     href="https://github.com/Fanfulla/MCP_Trenitalia"
@@ -759,6 +767,86 @@ export default function Home() {
               })}
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Demo Videos ── */}
+      <section id="demo" aria-label="Demo video MCP Trenitalia" className="py-24 md:py-36 px-6">
+        <div className="mx-auto max-w-5xl">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-16 md:mb-20"
+          >
+            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-[0.25em]">
+              {t.demo.eyebrow}
+            </span>
+            <h2 className="mt-5 text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight text-foreground">
+              {t.demo.title}
+            </h2>
+            <p className="mt-5 text-muted-foreground max-w-xl mx-auto text-base sm:text-lg">
+              {t.demo.subtitle}
+            </p>
+          </motion.div>
+
+          {/* Video selector tabs */}
+          <div className="flex flex-wrap justify-center gap-2 mb-8">
+            {t.demo.videos.map((video, i) => (
+              <button
+                key={video.src}
+                onClick={() => setActiveVideo(i)}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-300 cursor-pointer ${
+                  activeVideo === i
+                    ? "bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-300 border border-blue-500/25 shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-white/[0.05] border border-transparent"
+                }`}
+              >
+                <Play className={`w-3.5 h-3.5 ${activeVideo === i ? "text-blue-500" : ""}`} />
+                {video.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Active video player */}
+          <motion.div
+            key={activeVideo}
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4, ease: [0.25, 0.4, 0.25, 1] }}
+            className="relative mx-auto"
+          >
+            {/* Glow behind video */}
+            <div className="absolute -inset-4 bg-gradient-to-r from-blue-500/8 via-purple-500/8 to-blue-500/8 dark:from-blue-600/12 dark:via-purple-600/12 dark:to-blue-600/12 rounded-3xl blur-2xl -z-10" />
+
+            <div className={`relative rounded-2xl overflow-hidden border border-border/80 dark:border-white/[0.1] bg-black shadow-2xl shadow-black/20 dark:shadow-black/50 ${
+              t.demo.videos[activeVideo].src.includes("mobile") ? "max-w-sm mx-auto" : "max-w-4xl mx-auto"
+            }`}>
+              {/* Browser-style header */}
+              <div className="flex items-center px-4 py-2.5 border-b border-white/[0.06] bg-gradient-to-r from-neutral-900/80 to-neutral-900/60">
+                <div className="flex gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]/80" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#febc2e]/80" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#28c840]/80" />
+                </div>
+                <span className="flex-1 text-center text-[11px] text-white/40 font-mono">
+                  {t.demo.videos[activeVideo].label}
+                </span>
+                <div className="w-[52px]" />
+              </div>
+
+              <video
+                key={t.demo.videos[activeVideo].src}
+                src={t.demo.videos[activeVideo].src}
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full h-auto"
+              />
+            </div>
+          </motion.div>
         </div>
       </section>
 
