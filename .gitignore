@@ -7,3 +7,7 @@ IT-IT-TRENITALIA_L1.xml.gz
 .claude/
 CLAUDE.md
 docs/
+
+# Web (Next.js)
+web/node_modules/
+web/.next/
