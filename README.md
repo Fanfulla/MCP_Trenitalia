@@ -4,6 +4,24 @@ Server **MCP (Model Context Protocol)** per dati ferroviari italiani (Trenitalia
 
 Permette a modelli LLM come Claude di rispondere a domande sui treni italiani in linguaggio naturale: orari, ritardi, partenze, arrivi, tracciamento in tempo reale.
 
+🌐 **[ciuff.org](https://ciuff.org/)** — landing page del progetto. *Ciuff* come in *ciuff ciuff*: il nome è volutamente goliardico.
+
+---
+
+## Demo
+
+Collega il server a **Claude Desktop**, **Claude Web** o qualsiasi client MCP compatibile (vedi sezioni sotto) e interroga Claude in linguaggio naturale.
+
+Esempi di domande che puoi fare a Claude con questo server attivo:
+
+> "Che treni passano da Roma Tuscolana verso Roma Aurelia stamattina?"
+
+> "Il Frecciarossa 9631 è in ritardo?"
+
+> "Mostrami le prossime partenze da Milano Centrale"
+
+> "Domani mattina a che ora passa il treno da Tuscolana ad Aurelia?"
+
 ---
 
 ## Funzionalità
@@ -44,10 +62,9 @@ File NeTEx Italian Profile pubblicato da IT-RAP, contenente 25.480 corse ferrovi
 ## Stack tecnico
 
 - **Python 3.12**
-- **[mcp[cli] 1.26.0](https://github.com/modelcontextprotocol/python-sdk)** — FastMCP con trasporto SSE nativo
+- **[mcp\[cli\] 1.26.0](https://github.com/modelcontextprotocol/python-sdk)** — FastMCP con trasporto SSE e streamable-http
 - **[httpx](https://www.python-httpx.org/)** — client HTTP asincrono per le API Viaggiatreno
 - **[pydantic v2](https://docs.pydantic.dev/)** — validazione input dei tool
-- **uv** — gestione dipendenze
 
 ---
 
@@ -62,19 +79,61 @@ data/
   timetable.json.gz     # Orario NeTEx compresso (25.480 corse, ~1.1 MB)
 build_stazioni.py       # Script per rigenerare stazioni.json
 build_timetable.py      # Script per rigenerare timetable.json.gz
+web/                    # Landing page Next.js (ciuff.org)
 ```
 
 ---
 
-## Installazione
+## Installazione locale
+
+### Prerequisiti
+
+- **Python 3.12+** — scaricabile da [python.org](https://www.python.org/downloads/)
+- **Git** — scaricabile da [git-scm.com](https://git-scm.com/)
+
+### 1. Clona il repo
 
 ```bash
-# Clona il repo
 git clone https://github.com/Fanfulla/MCP_Trenitalia.git
 cd MCP_Trenitalia
+```
 
-# Crea venv e installa dipendenze
+### 2. Installa le dipendenze
+
+Puoi usare **uv** (consigliato, più veloce) o il classico **pip**.
+
+#### Con uv (consigliato)
+
+[uv](https://docs.astral.sh/uv/) è un package manager Python moderno e molto più veloce di pip. Per installarlo:
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Poi, nella cartella del progetto:
+
+```bash
 uv venv && uv pip install -r requirements.txt
+```
+
+#### Con pip (alternativa)
+
+Se preferisci non installare uv, funziona anche con il pip standard incluso in Python:
+
+```bash
+python -m venv .venv
+
+# macOS / Linux
+source .venv/bin/activate
+
+# Windows
+.venv\Scripts\activate
+
+pip install -r requirements.txt
 ```
 
 ---
@@ -82,16 +141,15 @@ uv venv && uv pip install -r requirements.txt
 ## Avvio
 
 ```bash
-# Modalità stdio — per Claude Desktop / Cursor
+# Modalità stdio — per Claude Desktop / Cursor / IDE
 python server.py
 
-# Modalità SSE — per deploy remoto / HTTP
+# Modalità HTTP — per deploy remoto o Claude Web
 python server.py --http
 ```
 
-In modalità SSE il server espone:
-- `GET /sse` — stream SSE (server → client)
-- `POST /messages` — messaggi MCP (client → server)
+In modalità `--http` il server espone l'endpoint MCP su:
+- `POST /mcp` (streamable-http, compatibile con Claude Web)
 
 Porta default: `8000` (configurabile con variabile d'ambiente `PORT`).
 
@@ -99,20 +157,26 @@ Porta default: `8000` (configurabile con variabile d'ambiente `PORT`).
 
 ## Configurazione Claude Desktop
 
-Aggiungi in `claude_desktop_config.json`:
+Claude Desktop legge la configurazione da un file JSON. Apri o crea il file `claude_desktop_config.json`:
 
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+Aggiungi la sezione `mcpServers`:
+
+**macOS / Linux:**
 ```json
 {
   "mcpServers": {
     "MCP Trenitalia": {
-      "command": "/percorso/al/.venv/bin/python",
-      "args": ["/percorso/al/server.py"]
+      "command": "/percorso/assoluto/al/.venv/bin/python",
+      "args": ["/percorso/assoluto/al/server.py"]
     }
   }
 }
 ```
 
-Su Windows:
+**Windows:**
 ```json
 {
   "mcpServers": {
@@ -124,34 +188,40 @@ Su Windows:
 }
 ```
 
+> **Nota**: usa percorsi assoluti. Dopo aver salvato il file, riavvia Claude Desktop.
+
+---
+
+## Deploy su Railway
+
+Il repo include un `Procfile` pronto per [Railway](https://railway.app/):
+
+```
+web: python server.py --http
+```
+
+Basta collegare la repo GitHub a un nuovo progetto Railway — il deploy è automatico. La variabile `PORT` viene iniettata automaticamente da Railway.
+
 ---
 
 ## Variabili d'ambiente
 
 | Variabile | Default | Descrizione |
 |---|---|---|
-| `PORT` | `8000` | Porta SSE |
+| `PORT` | `8000` | Porta del server HTTP |
 | `MCP_HOST` | `0.0.0.0` | Host binding |
 | `LOG_LEVEL` | `info` | Livello log |
-
----
-
-## Esempi d'uso
-
-Con Claude Desktop o qualsiasi client MCP compatibile:
-
-> "Che treni passano da Roma Tuscolana verso Roma Aurelia stamattina?"
-
-> "Il Frecciarossa 9631 è in ritardo?"
-
-> "Mostrami le prossime partenze da Milano Centrale"
-
-> "Domani mattina a che ora passa il treno da Tuscolana ad Aurelia?"
 
 ---
 
 ## Note
 
 - L'API Viaggiatreno è non ufficiale e non documentata — il server gestisce in modo difensivo tutti i casi di risposta anomala
-- Il file NeTEx è valido nel periodo **2025-12-14 → 2026-06-13** — per aggiornarlo eseguire `build_timetable.py` con il nuovo file
+- Il file NeTEx è valido nel periodo **2025-12-14 → 2026-06-13** — per aggiornarlo eseguire `build_timetable.py` con il nuovo file NeTEx
 - I tool non sollevano mai eccezioni verso il client: in caso di errore restituiscono un messaggio descrittivo in italiano
+
+---
+
+## Licenza
+
+MIT — Copyright (c) 2026 Fanfulla
