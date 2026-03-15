@@ -69,7 +69,7 @@ function AnimatedOrb({
 }) {
   return (
     <motion.div
-      className={`absolute rounded-full blur-3xl pointer-events-none ${className}`}
+      className={`absolute rounded-full blur-3xl pointer-events-none hidden md:block ${className}`}
       style={{ width: size, height: size }}
       animate={{
         x: [0, 80, -80, 0],
@@ -351,7 +351,7 @@ function FeatureCard({
 const INSTALL_LINES = [
   "git clone https://github.com/Fanfulla/MCP_Trenitalia.git",
   "cd MCP_Trenitalia",
-  "uv venv && uv pip install -r requirements.txt",
+  "pip install -r requirements.txt",
   "python server.py",
 ];
 
@@ -604,7 +604,7 @@ export default function Home() {
       </header>
 
       {/* ── Hero ── */}
-      <section id="hero" aria-label="MCP Trenitalia — Server MCP per treni italiani in tempo reale" className="relative pt-16 pb-24 md:pt-24 md:pb-36 px-6">
+      <section id="hero" aria-label="MCP Trenitalia — Server MCP per treni italiani in tempo reale" className="relative pt-10 pb-14 md:pt-18 md:pb-24 px-6">
         <div className="mx-auto max-w-4xl text-center">
           <motion.div initial={{ opacity: 0, y: -15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <span className="inline-flex items-center gap-2.5 rounded-full border border-blue-500/25 bg-blue-500/8 dark:bg-blue-500/10 backdrop-blur-sm px-5 py-2 text-xs font-medium text-blue-600 dark:text-blue-300 tracking-wide uppercase">
@@ -666,21 +666,21 @@ export default function Home() {
           </motion.div>
 
           {/* Terminal */}
-          <div className="mt-16 md:mt-24">
+          <div className="mt-10 md:mt-16">
             <TerminalPreview locale={locale} />
           </div>
         </div>
       </section>
 
       {/* ── Features ── */}
-      <section id="features" aria-label="5 MCP tools per i treni italiani" className="py-24 md:py-36 px-6">
+      <section id="features" aria-label="5 MCP tools per i treni italiani" className="py-14 md:py-20 px-6">
         <div className="mx-auto max-w-6xl">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-center mb-16 md:mb-20"
+            className="text-center mb-10 md:mb-14"
           >
             <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-[0.25em]">
               {t.features.eyebrow}
@@ -710,75 +710,15 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── How it works ── */}
-      <section id="how-it-works" aria-label="Come funziona MCP Trenitalia" className="py-24 md:py-36 px-6">
-        <div className="mx-auto max-w-4xl">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-16 md:mb-20"
-          >
-            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-[0.25em]">
-              {t.howItWorks.eyebrow}
-            </span>
-            <h2 className="mt-5 text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight text-foreground">
-              {t.howItWorks.title}
-            </h2>
-            <p className="mt-5 text-muted-foreground max-w-xl mx-auto text-base sm:text-lg">
-              {t.howItWorks.subtitle}
-            </p>
-          </motion.div>
-
-          <div className="relative">
-            <div className="absolute left-[28px] top-6 bottom-6 w-px bg-gradient-to-b from-blue-500/10 via-purple-500/5 to-transparent dark:from-blue-500/30 dark:via-purple-500/15 hidden md:block" />
-
-            <div className="space-y-6">
-              {t.howItWorks.steps.map((step, i) => {
-                const StepIcon = stepIcons[i];
-                return (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -30 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true, margin: "-60px" }}
-                    transition={{ duration: 0.5, delay: i * 0.12, ease: [0.25, 0.4, 0.25, 1] }}
-                    className="group flex gap-5 items-start"
-                  >
-                    <div className="shrink-0 relative z-10 h-14 w-14 rounded-2xl bg-card border border-border flex items-center justify-center group-hover:border-blue-500/30 group-hover:bg-blue-500/10 transition-all duration-300">
-                      <StepIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div className="pt-2 pb-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-[11px] font-mono text-blue-500/40 dark:text-blue-400/50 tabular-nums">
-                          {String(i + 1).padStart(2, "0")}
-                        </span>
-                        <h3 className="text-lg font-bold tracking-tight text-foreground group-hover:text-blue-700 dark:group-hover:text-blue-100 transition-colors">
-                          {step.title}
-                        </h3>
-                      </div>
-                      <p className="text-sm text-muted-foreground leading-relaxed max-w-lg">
-                        {step.description}
-                      </p>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* ── Demo Videos ── */}
-      <section id="demo" aria-label="Demo video MCP Trenitalia" className="py-24 md:py-36 px-6">
+      <section id="demo" aria-label="Demo video MCP Trenitalia" className="py-14 md:py-20 px-6">
         <div className="mx-auto max-w-5xl">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-center mb-16 md:mb-20"
+            className="text-center mb-10 md:mb-14"
           >
             <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-[0.25em]">
               {t.demo.eyebrow}
@@ -850,8 +790,68 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── How it works ── */}
+      <section id="how-it-works" aria-label="Come funziona MCP Trenitalia" className="py-14 md:py-20 px-6">
+        <div className="mx-auto max-w-4xl">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-10 md:mb-14"
+          >
+            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-[0.25em]">
+              {t.howItWorks.eyebrow}
+            </span>
+            <h2 className="mt-5 text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight text-foreground">
+              {t.howItWorks.title}
+            </h2>
+            <p className="mt-5 text-muted-foreground max-w-xl mx-auto text-base sm:text-lg">
+              {t.howItWorks.subtitle}
+            </p>
+          </motion.div>
+
+          <div className="relative">
+            <div className="absolute left-[28px] top-6 bottom-6 w-px bg-gradient-to-b from-blue-500/10 via-purple-500/5 to-transparent dark:from-blue-500/30 dark:via-purple-500/15 hidden md:block" />
+
+            <div className="space-y-6">
+              {t.howItWorks.steps.map((step, i) => {
+                const StepIcon = stepIcons[i];
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -30 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true, margin: "-60px" }}
+                    transition={{ duration: 0.5, delay: i * 0.12, ease: [0.25, 0.4, 0.25, 1] }}
+                    className="group flex gap-5 items-start"
+                  >
+                    <div className="shrink-0 relative z-10 h-14 w-14 rounded-2xl bg-card border border-border flex items-center justify-center group-hover:border-blue-500/30 group-hover:bg-blue-500/10 transition-all duration-300">
+                      <StepIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div className="pt-2 pb-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-[11px] font-mono text-blue-500/40 dark:text-blue-400/50 tabular-nums">
+                          {String(i + 1).padStart(2, "0")}
+                        </span>
+                        <h3 className="text-lg font-bold tracking-tight text-foreground group-hover:text-blue-700 dark:group-hover:text-blue-100 transition-colors">
+                          {step.title}
+                        </h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground leading-relaxed max-w-lg">
+                        {step.description}
+                      </p>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Tech Stack ── */}
-      <section className="py-20 md:py-28 px-6">
+      <section className="py-12 md:py-16 px-6">
         <div className="mx-auto max-w-4xl">
           <div className="text-center mb-14">
             <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-[0.25em]">
@@ -880,14 +880,14 @@ export default function Home() {
       </section>
 
       {/* ── Install snippet ── */}
-      <section className="py-16 md:py-24 px-6">
+      <section className="py-10 md:py-14 px-6">
         <div className="mx-auto max-w-2xl">
           <InstallTerminal locale={locale} />
         </div>
       </section>
 
       {/* ── Final CTA ── */}
-      <section className="py-24 md:py-36 px-6">
+      <section className="py-16 md:py-24 px-6">
         <div className="mx-auto max-w-3xl text-center">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
