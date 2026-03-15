@@ -224,4 +224,4 @@ Basta collegare la repo GitHub a un nuovo progetto Railway — il deploy è auto
 
 ## Licenza
 
-MIT — Copyright (c) 2026 Fanfulla
+[MIT](https://github.com/Fanfulla/MCP_Trenitalia?tab=MIT-1-ov-file) — Copyright (c) 2026 Fanfulla
