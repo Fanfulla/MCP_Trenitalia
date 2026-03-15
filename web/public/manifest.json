@@ -1,0 +1,16 @@
+{
+  "name": "MCP Trenitalia",
+  "short_name": "MCP Treni",
+  "description": "Server MCP open source per dati ferroviari italiani in tempo reale",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a1a",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
