@@ -103,7 +103,7 @@ export const translations = {
     demo: {
       eyebrow: "In Azione",
       title: "Guarda come funziona",
-      subtitle: "Demo reali dell'MCP Server in azione su Claude Desktop e mobile.",
+      subtitle: "Demo reali dell'MCP Server in azione su Claude Web, Desktop e Mobile.",
       videos: [
         { src: "/videos/demo-desktop-1.mp4", label: "Claude Desktop — Ricerca treni" },
         { src: "/videos/demo-desktop-2.mp4", label: "Claude Desktop — Tracciamento live" },
@@ -227,7 +227,7 @@ export const translations = {
     demo: {
       eyebrow: "In Action",
       title: "See it in action",
-      subtitle: "Real demos of the MCP Server running on Claude Desktop and mobile.",
+      subtitle: "Real demos of the MCP Server running on Claude Web, Desktop and Mobile.",
       videos: [
         { src: "/videos/demo-desktop-1.mp4", label: "Claude Desktop — Train Search" },
         { src: "/videos/demo-desktop-2.mp4", label: "Claude Desktop — Live Tracking" },
