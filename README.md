@@ -1,110 +1,110 @@
 # MCP Trenitalia
 
-Server **MCP (Model Context Protocol)** per dati ferroviari italiani (Trenitalia) in tempo reale, costruito con [FastMCP](https://github.com/jlowin/fastmcp) e le API non ufficiali di **Viaggiatreno** (Trenitalia).
+An **MCP (Model Context Protocol)** server for real-time Italian railway data (Trenitalia), built with [FastMCP](https://github.com/jlowin/fastmcp) and the unofficial **Viaggiatreno** API.
 
-Permette a modelli LLM come Claude di rispondere a domande sui treni italiani in linguaggio naturale: orari, ritardi, partenze, arrivi, tracciamento in tempo reale.
+Lets LLMs like Claude answer questions about Italian trains in natural language: schedules, delays, departures, arrivals, live tracking.
 
-🌐 **[ciuff.org](https://ciuff.org/)** — landing page del progetto. *Ciuff* come in *ciuff ciuff*: il nome è volutamente goliardico.
+🌐 **[ciuff.org](https://ciuff.org/)** — project landing page. *Ciuff* as in *ciuff ciuff* (the sound a train makes): the name is intentionally playful.
 
 ---
 
 ## Demo
 
-Collega il server a **Claude Desktop**, **Claude Web** o qualsiasi client MCP compatibile (vedi sezioni sotto) e interroga Claude in linguaggio naturale.
+Connect the server to **Claude Desktop**, **Claude Web**, or any MCP-compatible client (see setup sections below) and ask Claude in natural language.
 
-Esempi di domande che puoi fare a Claude con questo server attivo:
+Example queries:
 
-> "Che treni passano da Roma Tuscolana verso Roma Aurelia stamattina?"
+> "Which trains run from Roma Tuscolana to Roma Aurelia this morning?"
 
-> "Il Frecciarossa 9631 è in ritardo?"
+> "Is Frecciarossa 9631 delayed?"
 
-> "Mostrami le prossime partenze da Milano Centrale"
+> "Show me the next departures from Milano Centrale"
 
-> "Domani mattina a che ora passa il treno da Tuscolana ad Aurelia?"
+> "What time does the train from Tuscolana to Aurelia leave tomorrow morning?"
 
 ---
 
-## Funzionalità
+## Features
 
-5 tool disponibili:
+5 available tools:
 
-| Tool | Descrizione |
+| Tool | Description |
 |---|---|
-| `trenitalia_cerca_stazione` | Trova stazioni per nome e restituisce l'ID Viaggiatreno |
-| `trenitalia_monitora_partenze` | Bacheca partenze in tempo reale da una stazione |
-| `trenitalia_monitora_arrivi` | Bacheca arrivi in tempo reale in una stazione |
-| `trenitalia_traccia_treno` | Telemetria completa di un singolo treno (posizione, ritardo, fermate) |
-| `trenitalia_orari_tra_stazioni` | Orari tra due stazioni con verifica live e ritardo in tempo reale |
+| `trenitalia_cerca_stazione` | Find stations by name and return the Viaggiatreno ID |
+| `trenitalia_monitora_partenze` | Real-time departure board for a station |
+| `trenitalia_monitora_arrivi` | Real-time arrival board for a station |
+| `trenitalia_traccia_treno` | Full telemetry for a single train (position, delay, stops) |
+| `trenitalia_orari_tra_stazioni` | Schedules between two stations with live verification and real-time delays |
 
-Tutti i tool accettano nomi in chiaro (es. `"Tuscolana"`, `"Roma Termini"`) oltre agli ID tecnici (`"S08408"`).
+All tools accept plain names (e.g. `"Tuscolana"`, `"Roma Termini"`) as well as technical IDs (`"S08408"`).
 
 ---
 
-## Come funziona
+## How it works
 
-### Fonti dati
+### Data sources
 
 **Viaggiatreno (real-time)**
-API non ufficiale di Trenitalia per dati in tempo reale: partenze, arrivi, posizione e ritardo dei treni.
+Trenitalia's unofficial API for live data: departures, arrivals, train position and delay.
 
-**NeTEx (orario teorico offline)**
-File NeTEx Italian Profile pubblicato da IT-RAP, contenente 25.480 corse ferroviarie con fermate e orari. Viene usato come fonte primaria per il tool `orari_tra_stazioni`.
+**NeTEx (offline timetable)**
+NeTEx Italian Profile file published by IT-RAP, containing 25,480 train journeys with stops and schedules. Used as the primary source for `orari_tra_stazioni`.
 
-### Logica ibrida per `orari_tra_stazioni`
+### Hybrid logic for `orari_tra_stazioni`
 
-1. **NeTEx offline** — trova tutte le corse che collegano stazione A a stazione B nel giorno richiesto, filtrando per giorno della settimana e periodo di validità
-2. **Cross-check live** — per le corse che partono entro i prossimi 90 minuti, verifica che il treno compaia nella bacheca partenze reale di Viaggiatreno (elimina i treni "fantasma" presenti in NeTEx ma che in realtà non fermano in quella stazione)
-3. **Ritardo real-time** — arricchisce ogni corsa con il ritardo attuale da Viaggiatreno, in parallelo con `asyncio.gather`
-4. **Fallback Viaggiatreno** — se NeTEx non trova risultati (treni straordinari, soppressi, ecc.), interroga direttamente la bacheca live e verifica fermata per fermata il percorso reale
+1. **NeTEx offline** — finds all journeys connecting station A to station B on the requested day, filtered by weekday and validity period
+2. **Live cross-check** — for journeys departing within the next 90 minutes, verifies the train actually appears on the Viaggiatreno departure board (removes "ghost trains" present in NeTEx but not actually stopping at that station)
+3. **Real-time delay enrichment** — enriches each journey with the current delay from Viaggiatreno, parallelised with `asyncio.gather`
+4. **Viaggiatreno fallback** — if NeTEx returns no results (special services, cancellations, etc.), queries the live board directly and verifies stop-by-stop the actual route
 
 ---
 
-## Stack tecnico
+## Tech stack
 
 - **Python 3.12**
-- **[mcp\[cli\] 1.26.0](https://github.com/modelcontextprotocol/python-sdk)** — FastMCP con trasporto SSE e streamable-http
-- **[httpx](https://www.python-httpx.org/)** — client HTTP asincrono per le API Viaggiatreno
-- **[pydantic v2](https://docs.pydantic.dev/)** — validazione input dei tool
+- **[mcp\[cli\] 1.26.0](https://github.com/modelcontextprotocol/python-sdk)** — FastMCP with SSE and streamable-http transport
+- **[httpx](https://www.python-httpx.org/)** — async HTTP client for the Viaggiatreno API
+- **[pydantic v2](https://docs.pydantic.dev/)** — tool input validation
 
 ---
 
-## Struttura
+## Project structure
 
 ```
-server.py               # FastMCP server + 5 tool (entrypoint)
-viaggiatreno.py         # Client httpx per API Viaggiatreno
+server.py               # FastMCP server + 5 tools (entrypoint)
+viaggiatreno.py         # httpx client for the Viaggiatreno API
 models.py               # Pydantic v2 input models
 data/
-  stazioni.json         # Dizionario nome → ID Viaggiatreno (1610 stazioni)
-  timetable.json.gz     # Orario NeTEx compresso (25.480 corse, ~1.1 MB)
-build_stazioni.py       # Script per rigenerare stazioni.json
-build_timetable.py      # Script per rigenerare timetable.json.gz
-web/                    # Landing page Next.js (ciuff.org)
+  stazioni.json         # Name → Viaggiatreno ID dictionary (1,610 stations)
+  timetable.json.gz     # Compressed NeTEx timetable (25,480 journeys, ~1.1 MB)
+build_stazioni.py       # Script to regenerate stazioni.json
+build_timetable.py      # Script to regenerate timetable.json.gz
+web/                    # Next.js landing page (ciuff.org)
 ```
 
 ---
 
-## Installazione locale
+## Local installation
 
-### Prerequisiti
+### Prerequisites
 
-- **Python 3.12+** — scaricabile da [python.org](https://www.python.org/downloads/)
-- **Git** — scaricabile da [git-scm.com](https://git-scm.com/)
+- **Python 3.12+** — download from [python.org](https://www.python.org/downloads/)
+- **Git** — download from [git-scm.com](https://git-scm.com/)
 
-### 1. Clona il repo
+### 1. Clone the repo
 
 ```bash
 git clone https://github.com/Fanfulla/MCP_Trenitalia.git
 cd MCP_Trenitalia
 ```
 
-### 2. Installa le dipendenze
+### 2. Install dependencies
 
-Puoi usare **uv** (consigliato, più veloce) o il classico **pip**.
+You can use **uv** (recommended, much faster) or the standard **pip**.
 
-#### Con uv (consigliato)
+#### With uv (recommended)
 
-[uv](https://docs.astral.sh/uv/) è un package manager Python moderno e molto più veloce di pip. Per installarlo:
+[uv](https://docs.astral.sh/uv/) is a modern Python package manager, significantly faster than pip. To install it:
 
 ```bash
 # macOS / Linux
@@ -114,15 +114,15 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Poi, nella cartella del progetto:
+Then, inside the project folder:
 
 ```bash
 uv venv && uv pip install -r requirements.txt
 ```
 
-#### Con pip (alternativa)
+#### With pip (alternative)
 
-Se preferisci non installare uv, funziona anche con il pip standard incluso in Python:
+If you prefer not to install uv, the standard pip works just fine:
 
 ```bash
 python -m venv .venv
@@ -138,39 +138,39 @@ pip install -r requirements.txt
 
 ---
 
-## Avvio
+## Running the server
 
 ```bash
-# Modalità stdio — per Claude Desktop / Cursor / IDE
+# stdio mode — for Claude Desktop / Cursor / local IDEs
 python server.py
 
-# Modalità HTTP — per deploy remoto o Claude Web
+# HTTP mode — for remote deploy or Claude Web
 python server.py --http
 ```
 
-In modalità `--http` il server espone l'endpoint MCP su:
-- `POST /mcp` (streamable-http, compatibile con Claude Web)
+In `--http` mode the server exposes the MCP endpoint at:
+- `POST /mcp` (streamable-http transport)
 
-Porta default: `8000` (configurabile con variabile d'ambiente `PORT`).
+Default port: `8000` (override with the `PORT` environment variable).
 
 ---
 
-## Configurazione Claude Desktop
+## Claude Desktop setup
 
-Claude Desktop legge la configurazione da un file JSON. Apri o crea il file `claude_desktop_config.json`:
+Claude Desktop reads its configuration from a JSON file. Open or create `claude_desktop_config.json`:
 
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
-Aggiungi la sezione `mcpServers`:
+Add the `mcpServers` section:
 
 **macOS / Linux:**
 ```json
 {
   "mcpServers": {
     "MCP Trenitalia": {
-      "command": "/percorso/assoluto/al/.venv/bin/python",
-      "args": ["/percorso/assoluto/al/server.py"]
+      "command": "/absolute/path/to/.venv/bin/python",
+      "args": ["/absolute/path/to/server.py"]
     }
   }
 }
@@ -181,47 +181,47 @@ Aggiungi la sezione `mcpServers`:
 {
   "mcpServers": {
     "MCP Trenitalia": {
-      "command": "C:\\percorso\\al\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\percorso\\al\\server.py"]
+      "command": "C:\\absolute\\path\\to\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\absolute\\path\\to\\server.py"]
     }
   }
 }
 ```
 
-> **Nota**: usa percorsi assoluti. Dopo aver salvato il file, riavvia Claude Desktop.
+> **Note**: use absolute paths. Restart Claude Desktop after saving the file.
 
 ---
 
-## Deploy su Railway
+## Deploy to Railway
 
-Il repo include un `Procfile` pronto per [Railway](https://railway.app/):
+The repo includes a ready-made `Procfile` for [Railway](https://railway.app/):
 
 ```
 web: python server.py --http
 ```
 
-Basta collegare la repo GitHub a un nuovo progetto Railway — il deploy è automatico. La variabile `PORT` viene iniettata automaticamente da Railway.
+Just connect the GitHub repo to a new Railway project — deploys are automatic. The `PORT` variable is injected automatically by Railway.
 
 ---
 
-## Variabili d'ambiente
+## Environment variables
 
-| Variabile | Default | Descrizione |
+| Variable | Default | Description |
 |---|---|---|
-| `PORT` | `8000` | Porta del server HTTP |
-| `MCP_HOST` | `0.0.0.0` | Host binding |
-| `LOG_LEVEL` | `info` | Livello log |
+| `PORT` | `8000` | HTTP server port |
+| `MCP_HOST` | `0.0.0.0` | Binding host |
+| `LOG_LEVEL` | `info` | Log level |
 
 ---
 
-## Note
+## Notes
 
-- L'API Viaggiatreno è non ufficiale e non documentata — il server gestisce in modo difensivo tutti i casi di risposta anomala
-- Il file NeTEx è valido nel periodo **2025-12-14 → 2026-06-13** — per aggiornarlo eseguire `build_timetable.py` con il nuovo file NeTEx
-- I tool non sollevano mai eccezioni verso il client: in caso di errore restituiscono un messaggio descrittivo in italiano
+- The Viaggiatreno API is unofficial and undocumented — the server handles all anomalous responses defensively
+- The NeTEx file is valid for the period **2025-12-14 → 2026-06-13** — to update it, run `build_timetable.py` with a new NeTEx file
+- Tools never raise exceptions to the client: on error they return a descriptive message in Italian
 
 ---
 
-## Licenza
+## License
 
 [MIT](https://github.com/Fanfulla/MCP_Trenitalia?tab=MIT-1-ov-file) — Copyright (c) 2026 Fanfulla
