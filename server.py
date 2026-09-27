@@ -21,9 +21,10 @@ from typing import Any
 import httpx
 from mcp.server import MCPServer
 from mcp_types import ToolAnnotations
-from http_client import close_clients
+from http_client import UpstreamError, close_clients
 from rail_service import RailService
 from time_utils import ROME, now_rome, format_viaggiatreno_time
+from timetable import station_key
 from italo import get_station_board
 
 from models import (
@@ -59,12 +60,15 @@ def _cerca_locale(query: str) -> list[dict]:
     """
     Ricerca fuzzy sul dizionario locale (data/stazioni.json).
     Restituisce lista di {nome, id} con i match migliori.
-    Strategia: exact → startswith → substring (tutte case-insensitive).
+    Strategia: exact → startswith → substring (tutte case-insensitive), poi nome
+    normalizzato (es. 'Bologna Centrale' ↔ 'BOLOGNA C.LE').
     """
     q = query.strip().upper()
+    chiave = station_key(query)
     esatti = []
     iniziano = []
     contengono = []
+    simili = []
 
     for nome, sid in _STAZIONI.items():
         nome_up = nome.upper()
@@ -74,11 +78,13 @@ def _cerca_locale(query: str) -> list[dict]:
             iniziano.append({"nome": nome.title(), "id": sid})
         elif q in nome_up:
             contengono.append({"nome": nome.title(), "id": sid})
+        elif chiave and f" {chiave} " in f" {station_key(nome)} ":
+            simili.append({"nome": nome.title(), "id": sid})
 
-    return esatti + iniziano + contengono
+    return esatti + iniziano + contengono + simili
 
 
-def _resolve_stazione(ref: str) -> tuple[str, str] | str:
+async def _resolve_stazione(ref: str) -> tuple[str, str] | str:
     """
     Risolve un riferimento stazione (nome in chiaro o ID) all'ID Viaggiatreno.
 
@@ -88,7 +94,7 @@ def _resolve_stazione(ref: str) -> tuple[str, str] | str:
 
     Logica:
     - Se sembra già un ID (inizia con 'S' e ha solo cifre dopo) → restituisce direttamente
-    - Altrimenti cerca nel dizionario locale con fuzzy match
+    - Altrimenti cerca nel dizionario locale con fuzzy match, poi su Viaggiatreno
       - 1 risultato → risolto
       - >1 risultati → chiede disambiguazione all'utente
       - 0 risultati → messaggio di errore
@@ -100,7 +106,14 @@ def _resolve_stazione(ref: str) -> tuple[str, str] | str:
         return (v.upper(), next((name.title() for name, sid in _STAZIONI.items() if sid == v.upper()), v.upper()))
 
     risultati = _cerca_locale(v)
-    esatti = [r for r in risultati if r["nome"].casefold() == v.casefold()]
+    if not risultati:
+        try:
+            risultati = await cerca_stazione(v)
+        except (UpstreamError, ValueError):
+            risultati = []
+    chiave = station_key(v)
+    esatti = [r for r in risultati if r["nome"].casefold() == v.casefold()] or [
+        r for r in risultati if chiave and station_key(r["nome"]) == chiave]
     if esatti:
         risultati = esatti
 
@@ -114,7 +127,7 @@ def _resolve_stazione(ref: str) -> tuple[str, str] | str:
         )
 
     return (
-        f"Stazione '{v}' non trovata nel dizionario locale. "
+        f"Stazione '{v}' non trovata nel dizionario locale né su Viaggiatreno. "
         "Usa il tool `trenitalia_cerca_stazione` per cercarla per nome."
     )
 
@@ -169,9 +182,24 @@ def _format_binario(binario_programmato: Any, binario_effettivo: Any) -> str:
     return f"bin. {eff}"
 
 
+_MESSAGGI_FONTE = {
+    "unavailable": "i sistemi Viaggiatreno non rispondono o sono temporaneamente non disponibili. Riprova tra qualche istante.",
+    "malformed_payload": "Viaggiatreno ha restituito una risposta in un formato inatteso. Riprova più tardi.",
+    "response_too_large": "la risposta di Viaggiatreno supera il limite di dimensione consentito.",
+    "date_mismatch": "Viaggiatreno non riporta questo treno in circolazione oggi dalla stazione di origine indicata. Verifica numero treno e stazione di origine.",
+    "date_unverified": "Viaggiatreno non indica la data di circolazione del treno, quindi il dato non è verificabile.",
+    "ambiguous": "più treni corrispondono al numero indicato. Specifica la stazione di origine.",
+}
+
+
 def _handle_error(e: Exception, contesto: str = "") -> str:
-    """Converte eccezioni httpx in messaggi testuali per l'LLM."""
+    """Converte eccezioni di rete e della fonte dati in messaggi testuali per l'LLM."""
     prefisso = f"[{contesto}] " if contesto else ""
+    if isinstance(e, UpstreamError):
+        dettaglio = _MESSAGGI_FONTE.get(e.code, f"la fonte dati ha restituito un errore ({e.code}).")
+        return f"{prefisso}Errore: {dettaglio}"
+    if isinstance(e, ValueError):
+        return f"{prefisso}Errore: parametro non valido ({e})."
     if isinstance(e, httpx.TimeoutException):
         return f"{prefisso}Errore: i sistemi telemetrici Viaggiatreno sono irraggiungibili (timeout). Riprova tra qualche istante."
     if isinstance(e, httpx.HTTPStatusError):
@@ -288,11 +316,11 @@ async def trenitalia_monitora_partenze(params: MonitoraPartenzeInput) -> str:
 
     Esempi d'uso:
         - "Quando parte il prossimo treno da Milano?" → id_stazione="S01700"
-        - "Ci sono ritardi a Roma Termini?" → id_stazione="S00219"
-        - "Mostrami 20 partenze da Napoli" → id_stazione="S00785", limite=20
+        - "Ci sono ritardi a Roma Termini?" → id_stazione="S08409"
+        - "Mostrami 20 partenze da Napoli Centrale" → id_stazione="S09218", limite=20
     """
     try:
-        risolto = _resolve_stazione(params.id_stazione)
+        risolto = await _resolve_stazione(params.id_stazione)
         if isinstance(risolto, str):
             return risolto
         id_stazione, nome_display = risolto
@@ -389,7 +417,7 @@ async def trenitalia_monitora_arrivi(params: MonitoraArriviInput) -> str:
         - "Quanti treni sono in ritardo in arrivo a Venezia?" → id_stazione Venezia
     """
     try:
-        risolto = _resolve_stazione(params.id_stazione)
+        risolto = await _resolve_stazione(params.id_stazione)
         if isinstance(risolto, str):
             return risolto
         id_stazione, nome_display = risolto
@@ -476,7 +504,7 @@ async def trenitalia_traccia_treno(params: TracciaTrenoInput) -> str:
         - "A che binario arriverà il mio treno?" → usa questo tool e guarda l'ultima fermata
     """
     try:
-        risolto = _resolve_stazione(params.id_stazione_origine)
+        risolto = await _resolve_stazione(params.id_stazione_origine)
         if isinstance(risolto, str):
             return risolto
         id_stazione_origine, _ = risolto

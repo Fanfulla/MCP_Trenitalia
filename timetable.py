@@ -2,8 +2,10 @@
 
 import gzip
 import json
+import re
 import unicodedata
 from datetime import date, datetime, time, timedelta, timezone
+from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -102,16 +104,38 @@ def _normalise(value: str) -> str:
     return " ".join("".join(c for c in unicodedata.normalize("NFKD", value.casefold()) if not unicodedata.combining(c)).split())
 
 
+_KEY_EQUIVALENTS = {"san": "s", "santa": "s", "santo": "s", "sant": "s", "maria": "m"}
+_KEY_IGNORED = {"di", "de", "del", "della", "dei", "d", "stazione"}
+
+
+@lru_cache(maxsize=16384)
+def station_key(value: str) -> str:
+    text = re.sub(r"\([^)]*\)", " ", _normalise(value))
+    text = re.sub(r"\bc\.\s*le\b", " centrale ", text)
+    text = re.sub(r"\bs\.\s*m\.\s*n\b\.?", " s m novella ", text)
+    tokens = []
+    for token in re.split(r"[^0-9a-z]+", text):
+        if not token or token in _KEY_IGNORED:
+            continue
+        tokens.extend(["s", "m", "novella"] if token == "smn" else [_KEY_EQUIVALENTS.get(token, token)])
+    return " ".join(tokens)
+
+
 def search_stations(payload: dict, query: str) -> list[dict]:
     stations = payload.get("stations", [])
     exact_id = [station for station in stations if station["id"] == query.strip()]
     if exact_id:
         return exact_id
+    key = station_key(query)
     query = _normalise(query)
     if not query:
         return []
     exact = [station for station in stations if _normalise(station["name"]) == query]
+    if not exact and key:
+        exact = [station for station in stations if station_key(station["name"]) == key]
     matches = exact or [station for station in stations if query in _normalise(station["name"])]
+    if not matches and key:
+        matches = [station for station in stations if f" {key} " in f" {station_key(station['name'])} "]
     return sorted(matches, key=lambda station: (station["name"].casefold(), station["id"]))
 
 

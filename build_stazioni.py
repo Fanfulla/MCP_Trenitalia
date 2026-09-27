@@ -1,85 +1,54 @@
 #!/usr/bin/env python3
 """
-Script one-shot: costruisce data/stazioni.json
-Legge i nomi ufficiali dal NeTEx, risolve l'ID Viaggiatreno per ciascuno
-tramite cercaStazione, salva il dizionario nome→ID.
+Script one-shot: aggiorna data/stazioni.json (nome stazione NeTEx → ID Viaggiatreno).
+
+Legge le stazioni dall'orario Trenitalia locale (data/timetable.json.gz, creato da
+update_data.py) e risolve l'ID Viaggiatreno tramite cercaStazione. L'ID NeTEx contiene
+un codice numerico che spesso coincide con l'ID Viaggiatreno: viene preferito solo se
+Viaggiatreno restituisce una stazione con quel codice e un nome compatibile. Le voci
+esistenti che non si possono verificare restano invariate.
 
 Uso: python build_stazioni.py
 """
 
+from __future__ import annotations
+
 import asyncio
-import gzip
 import json
-import xml.etree.ElementTree as ET
+import re
+import sys
 from pathlib import Path
 
-import httpx
+from http_client import close_clients
+from timetable import load_timetable, station_key
+from viaggiatreno import cerca_stazione
 
-NS = "http://www.netex.org.uk/netex"
-NETEX_FILE = "IT-IT-TRENITALIA_L1.xml.gz"
-OUT_FILE = Path("data/stazioni.json")
-BASE_URL = "http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno"
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; trenitalia-mcp/1.0)"}
+DATA_DIR = Path(__file__).parent / "data"
+TIMETABLE_FILE = DATA_DIR / "timetable.json.gz"
+OUT_FILE = DATA_DIR / "stazioni.json"
 DELAY = 0.15  # secondi tra chiamate per non sovraccaricare l'API
 
-
-def load_netex_names() -> list[tuple[str, str]]:
-    """Restituisce lista di (nome_ufficiale, private_code) per le stazioni rail."""
-    print(f"Lettura {NETEX_FILE}...")
-    with gzip.open(NETEX_FILE, "rb") as f:
-        tree = ET.parse(f)
-    root = tree.getroot()
-
-    stazioni = []
-    for sp in root.findall(f".//{{{NS}}}StopPlace"):
-        tm = sp.find(f"{{{NS}}}TransportMode")
-        # Includi rail e other (le grandi stazioni come Roma Termini e Milano Centrale
-        # sono classificate "other" nel NeTEx). Escludi solo bus.
-        if tm is not None and tm.text == "bus":
-            continue
-        name_el = sp.find(f"{{{NS}}}Name")
-        pc_el = sp.find(f"{{{NS}}}PrivateCode")
-        if name_el is not None and name_el.text:
-            nome = name_el.text.strip()
-            pc = pc_el.text.strip() if pc_el is not None else ""
-            stazioni.append((nome, pc))
-
-    print(f"  {len(stazioni)} stazioni ferroviarie trovate nel NeTEx")
-    return stazioni
+STAZIONI_EXTRA = {"BOLOGNA C.LE AV": "S05046"}
 
 
-async def cerca_stazione_raw(client: httpx.AsyncClient, query: str) -> list[dict]:
-    url = f"{BASE_URL}/cercaStazione/{query.strip()}"
-    try:
-        r = await client.get(url, timeout=10.0)
-        r.raise_for_status()
-        raw = r.text.strip()
+def netex_code(station_id: str) -> str | None:
+    match = re.search(r":83\d{2}(\d{5})$", station_id)
+    return f"S{match.group(1)}" if match else None
 
-        # Prova JSON
-        try:
-            data = r.json()
-            if isinstance(data, list):
-                risultati = []
-                for item in data:
-                    nome = str(item.get("nomeLungo") or item.get("nome") or "").strip()
-                    id_st = str(item.get("id") or "").strip()
-                    if nome and id_st:
-                        risultati.append({"nome": nome.title(), "id": id_st})
-                return risultati
-        except Exception:
-            pass
 
-        # Fallback pipe-separated
-        risultati = []
-        for riga in raw.splitlines():
-            riga = riga.strip()
-            if "|" in riga:
-                nome, id_st = riga.split("|", 1)
-                risultati.append({"nome": nome.strip().title(), "id": id_st.strip()})
-        return risultati
+def compatibili(nome_netex: str, nome_viaggiatreno: str) -> bool:
+    a, b = station_key(nome_netex), station_key(nome_viaggiatreno)
+    return bool(a and b) and (a == b or f" {a} " in f" {b} " or f" {b} " in f" {a} ")
 
-    except Exception as e:
-        return []
+
+def varianti(nome: str) -> list[str]:
+    parole = nome.split()
+    risultato = []
+    for fine in range(len(parole), 0, -1):
+        query = " ".join(parole[:fine])
+        if len(query) >= 3 and query not in risultato:
+            risultato.append(query)
+    return risultato
 
 
 def find_best_match(nome_query: str, risultati: list[dict]) -> str | None:
@@ -105,45 +74,85 @@ def find_best_match(nome_query: str, risultati: list[dict]) -> str | None:
     return None
 
 
-async def build_mapping(stazioni: list[tuple[str, str]]) -> dict[str, str]:
-    mapping: dict[str, str] = {}
-    non_trovate: list[str] = []
+async def _cerca(query: str) -> list[dict]:
+    try:
+        return await cerca_stazione(query)
+    except Exception:
+        return []
+    finally:
+        await asyncio.sleep(DELAY)
 
-    async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
-        for i, (nome, _pc) in enumerate(stazioni):
-            risultati = await cerca_stazione_raw(client, nome)
-            station_id = find_best_match(nome, risultati)
 
-            if station_id:
-                mapping[nome.upper()] = station_id
-                status = f"OK → {station_id}"
-            else:
-                non_trovate.append(nome)
-                status = "NON TROVATA"
+async def risolvi(nome: str, codice: str | None) -> tuple[str | None, bool]:
+    primi: list[dict] | None = None
+    for query in varianti(nome):
+        risultati = await _cerca(query)
+        if primi is None:
+            primi = risultati
+        if codice and any(r["id"] == codice and compatibili(nome, r["nome"]) for r in risultati):
+            return codice, True
+        if not codice:
+            break
+    primi = primi or []
+    scelto = find_best_match(nome, primi)
+    if scelto and any(r["id"] == scelto and compatibili(nome, r["nome"]) for r in primi):
+        return scelto, False
+    return None, False
 
-            print(f"  [{i+1:3d}/{len(stazioni)}] {nome:<35} {status}")
-            await asyncio.sleep(DELAY)
 
-    print(f"\n✓ Risolte: {len(mapping)}/{len(stazioni)}")
-    if non_trovate:
-        print(f"✗ Non trovate ({len(non_trovate)}):")
-        for n in non_trovate:
-            print(f"    - {n}")
+async def aggiorna(stazioni: list[dict], esistenti: dict[str, str]) -> tuple[dict[str, str], dict[str, list]]:
+    mapping = dict(esistenti)
+    report: dict[str, list] = {"aggiunte": [], "corrette": [], "non_trovate": []}
+    for indice, stazione in enumerate(stazioni, 1):
+        nome, codice = stazione["name"].strip(), netex_code(stazione["id"])
+        chiave = nome.upper()
+        attuale = esistenti.get(chiave)
+        if attuale and (attuale == codice or codice is None):
+            continue
+        station_id, confermato = await risolvi(nome, codice)
+        if station_id and attuale is None:
+            mapping[chiave] = station_id
+            report["aggiunte"].append((chiave, station_id))
+        elif station_id and confermato and station_id != attuale:
+            mapping[chiave] = station_id
+            report["corrette"].append((chiave, attuale, station_id))
+        elif not station_id and attuale is None:
+            report["non_trovate"].append(chiave)
+        print(f"  [{indice:4d}/{len(stazioni)}] {chiave:<40} {mapping.get(chiave, 'NON TROVATA')}")
+    for chiave, station_id in STAZIONI_EXTRA.items():
+        if chiave not in mapping:
+            report["aggiunte"].append((chiave, station_id))
+        elif mapping[chiave] != station_id:
+            report["corrette"].append((chiave, mapping[chiave], station_id))
+        mapping[chiave] = station_id
+    return mapping, report
 
-    return mapping
+
+async def _main_async(stazioni: list[dict], esistenti: dict[str, str]):
+    try:
+        return await aggiorna(stazioni, esistenti)
+    finally:
+        await close_clients()
 
 
 def main():
-    stazioni = load_netex_names()
+    if not TIMETABLE_FILE.exists():
+        sys.exit("Orario Trenitalia assente: esegui prima python update_data.py --provider trenitalia")
+    stazioni = load_timetable(TIMETABLE_FILE)["stations"]
+    esistenti = json.loads(OUT_FILE.read_text(encoding="utf-8")) if OUT_FILE.exists() else {}
+    print(f"{len(stazioni)} stazioni nell'orario, {len(esistenti)} nel dizionario attuale")
 
-    print("\nRisoluzione ID Viaggiatreno...")
-    mapping = asyncio.run(build_mapping(stazioni))
+    mapping, report = asyncio.run(_main_async(stazioni, esistenti))
 
     OUT_FILE.parent.mkdir(exist_ok=True)
     with open(OUT_FILE, "w", encoding="utf-8") as f:
         json.dump(mapping, f, ensure_ascii=False, indent=2, sort_keys=True)
 
-    print(f"\nSalvato in {OUT_FILE} ({len(mapping)} stazioni)")
+    print(f"\nAggiunte: {len(report['aggiunte'])}  Corrette: {len(report['corrette'])}  "
+          f"Non trovate: {len(report['non_trovate'])}")
+    for chiave, prima, dopo in report["corrette"]:
+        print(f"  corretta {chiave}: {prima} → {dopo}")
+    print(f"Salvato in {OUT_FILE} ({len(mapping)} stazioni)")
 
 
 if __name__ == "__main__":
