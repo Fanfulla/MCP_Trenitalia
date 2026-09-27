@@ -19,7 +19,14 @@
 ### Fixed
 
 - Keep the mobile demo video in its native portrait aspect ratio at desktop, tablet and phone widths.
+- The mobile menu now closes after choosing a section, on Escape and on outside taps. The browser theme color follows the selected theme.
+- Raised light-theme secondary text contrast to WCAG AA and removed 9–10 px reading text.
 
+- `BOLOGNA C.LE` pointed to the underground high-speed platforms (S05046) instead of Bologna Centrale (S05043), now also listed separately as `BOLOGNA C.LE AV`. Firenze S.M.N. and 53 other timetable stations were missing from the Viaggiatreno dictionary; six more names now use the station confirmed by its NeTEx code.
+- Natural station names such as "Bologna Centrale", "Firenze Santa Maria Novella", "Firenze SMN" and "Venezia Santa Lucia" now match the abbreviated official names of both operators.
+- The five original tools resolve stations missing from the local dictionary through Viaggiatreno search.
+- Source failures are reported as specific Italian messages instead of "Errore imprevisto (UpstreamError)".
+- Tool examples referenced the wrong Viaggiatreno IDs for Roma Termini and Napoli Centrale.
 - Global NeTEx validity was lost during conversion, allowing the old June 2026 timetable to appear current.
 - Future journeys could receive today's live delays and departure-board fallback.
 - Fixed-offset and server-local time calculations now use `Europe/Rome`.
@@ -32,6 +39,10 @@
 
 - Updated Next.js and React, removed unused animation code and deferred demo video downloads.
 - Corrected the old translation of Trenitalia as generic "Italian trains" throughout the website.
+- Inlined the website CSS, stopped prefetching the current and alternate-language pages and switched demo posters to WebP: no render-blocking requests, 15 instead of 20 requests and 13% less transfer on first load.
+- Installation commands preselect macOS/Linux or Windows from the visitor's platform.
+
+- `build_stazioni.py` now updates `data/stazioni.json` from the local Trenitalia timetable, keeps entries it cannot verify and accepts a NeTEx code only when Viaggiatreno confirms it with a compatible name.
 
 - Migrated from official MCP Python SDK 1.26.0 to 2.2.0.
 - Kept the five original tool names and nested `params` inputs. `--http` remains legacy SSE; `--sse` makes that choice explicit.
