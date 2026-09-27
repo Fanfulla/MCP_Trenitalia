@@ -1,0 +1,17 @@
+{
+  "trenitalia": {
+    "url": "https://www.cciss.it/nap/mmtis/public/api/v1/download/blob/Asset/1080596/checkedResource",
+    "catalog_url": "https://www.cciss.it/nap/mmtis/public/catalog/Asset/1080596",
+    "dataset_url": "https://www.cciss.it/nap/mmtis/public/catalog/Dataset/1077621",
+    "license": "no_licence_no_contract",
+    "license_note": "CCISS catalogue reports No licence - No contract. Public download does not establish open redistribution rights; the project MIT license does not cover this dataset.",
+    "filename": "timetable.json.gz"
+  },
+  "italo": {
+    "url": "https://www.cciss.it/nap/mmtis/public/api/v1/download/blob/Asset/1814124/checkedResource",
+    "catalog_url": "https://www.cciss.it/nap/mmtis/public/catalog/Dataset/1813935",
+    "license": "unverified",
+    "license_note": "Public official download; no open redistribution license assumed. The project MIT license does not cover this dataset.",
+    "filename": "timetable_italo.json.gz"
+  }
+}

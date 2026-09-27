@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PublicationDelivery xmlns="http://www.netex.org.uk/netex">
+  <PublicationTimestamp>2026-10-20T12:00:00Z</PublicationTimestamp>
+  <dataObjects><CompositeFrame id="frame">
+    <ValidBetween><FromDate>2026-10-23T00:00:00</FromDate><ToDate>2026-10-27T23:59:59</ToDate></ValidBetween>
+    <frames>
+      <SiteFrame><stopPlaces>
+        <StopPlace id="A"><Name>Roma Termini</Name></StopPlace>
+        <StopPlace id="B"><Name>Roma Tiburtina</Name></StopPlace>
+        <StopPlace id="C"><Name>Milano Centrale</Name></StopPlace>
+      </stopPlaces></SiteFrame>
+      <ServiceFrame>
+        <stopAssignments>
+          <PassengerStopAssignment><ScheduledStopPointRef ref="sa"/><StopPlaceRef ref="A"/></PassengerStopAssignment>
+          <PassengerStopAssignment><ScheduledStopPointRef ref="sb"/><StopPlaceRef ref="B"/></PassengerStopAssignment>
+          <PassengerStopAssignment><ScheduledStopPointRef ref="sc"/><StopPlaceRef ref="C"/></PassengerStopAssignment>
+        </stopAssignments>
+        <lines><Line id="line"><Name>Intercity</Name><PublicCode>999</PublicCode><TransportMode>rail</TransportMode></Line></lines>
+        <journeyPatterns><ServiceJourneyPattern id="pattern"><RouteView><LineRef ref="line"/></RouteView><pointsInSequence>
+          <StopPointInJourneyPattern id="p3" order="3"><ScheduledStopPointRef ref="sc"/></StopPointInJourneyPattern>
+          <StopPointInJourneyPattern id="p1" order="1"><ScheduledStopPointRef ref="sa"/></StopPointInJourneyPattern>
+          <StopPointInJourneyPattern id="p2" order="2"><ScheduledStopPointRef ref="sb"/></StopPointInJourneyPattern>
+        </pointsInSequence></ServiceJourneyPattern></journeyPatterns>
+      </ServiceFrame>
+      <ServiceCalendarFrame>
+        <dayTypes><DayType id="weekday"><properties><PropertyOfDay><DaysOfWeek>Friday Monday</DaysOfWeek></PropertyOfDay></properties></DayType></dayTypes>
+        <operatingPeriods><OperatingPeriod id="period"><FromDate>2026-10-23</FromDate><ToDate>2026-10-27</ToDate></OperatingPeriod></operatingPeriods>
+        <operatingDays><OperatingDay id="extra"><CalendarDate>2026-10-24</CalendarDate></OperatingDay></operatingDays>
+        <dayTypeAssignments>
+          <DayTypeAssignment><OperatingPeriodRef ref="period"/><DayTypeRef ref="weekday"/></DayTypeAssignment>
+          <DayTypeAssignment><Date>2026-10-26</Date><DayTypeRef ref="weekday"/><isAvailable>false</isAvailable></DayTypeAssignment>
+          <DayTypeAssignment><OperatingDayRef ref="extra"/><DayTypeRef ref="weekday"/><isAvailable>true</isAvailable></DayTypeAssignment>
+        </dayTypeAssignments>
+      </ServiceCalendarFrame>
+      <TimetableFrame><vehicleJourneys><ServiceJourney id="journey"><Name>999</Name><TransportMode>rail</TransportMode><dayTypes><DayTypeRef ref="weekday"/></dayTypes><ServiceJourneyPatternRef ref="pattern"/><passingTimes>
+        <TimetabledPassingTime><StopPointInJourneyPatternRef ref="p3"/><ArrivalTime>03:10:00</ArrivalTime><ArrivalDayOffset>1</ArrivalDayOffset></TimetabledPassingTime>
+        <TimetabledPassingTime><StopPointInJourneyPatternRef ref="p1"/><DepartureTime>23:30:00</DepartureTime><DepartureDayOffset>0</DepartureDayOffset></TimetabledPassingTime>
+        <TimetabledPassingTime><StopPointInJourneyPatternRef ref="p2"/><ArrivalTime>00:25:00</ArrivalTime><ArrivalDayOffset>1</ArrivalDayOffset><DepartureTime>00:30:00</DepartureTime><DepartureDayOffset>1</DepartureDayOffset></TimetabledPassingTime>
+      </passingTimes></ServiceJourney></vehicleJourneys></TimetableFrame>
+    </frames>
+  </CompositeFrame></dataObjects>
+</PublicationDelivery>

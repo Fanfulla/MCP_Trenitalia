@@ -1,227 +1,186 @@
 # MCP Trenitalia
 
-An **MCP (Model Context Protocol)** server for real-time Italian railway data (Trenitalia), built with [FastMCP](https://github.com/jlowin/fastmcp) and the unofficial **Viaggiatreno** API.
+**Ciuff** is a free, self-hosted MCP server for Italian railway information. It combines official **Trenitalia and Italo timetables** with their public live-information services.
 
-Lets LLMs like Claude answer questions about Italian trains in natural language: schedules, delays, departures, arrivals, live tracking.
-
-🌐 **[ciuff.org](https://ciuff.org/)** — project landing page. *Ciuff* as in *ciuff ciuff* (the sound a train makes): the name is intentionally playful.
-
----
-
-## Demo
-
-Connect the server to **Claude Desktop**, **Claude Web**, or any MCP-compatible client (see setup sections below) and ask Claude in natural language.
-
-Example queries:
-
-> "Which trains run from Roma Tuscolana to Roma Aurelia this morning?"
-
-> "Is Frecciarossa 9631 delayed?"
-
-> "Show me the next departures from Milano Centrale"
-
-> "What time does the train from Tuscolana to Aurelia leave tomorrow morning?"
-
----
+[ciuff.org](https://ciuff.org/) is the existing project website. The server works over stdio, Streamable HTTP or legacy SSE. It needs no paid API account, subscription, database or cloud service.
 
 ## Features
 
-5 available tools:
+- Search stations and direct journeys across Trenitalia and Italo.
+- Query Trenitalia train status, arrivals and departures.
+- Query Italo train status and station boards.
+- Report timetable coverage, sources and update timestamps.
+- Keep future timetables separate from today's live information.
+- Provide official ticket-site links. **Live prices, seat availability and booking are not implemented.**
 
-| Tool | Description |
-|---|---|
-| `trenitalia_cerca_stazione` | Find stations by name and return the Viaggiatreno ID |
-| `trenitalia_monitora_partenze` | Real-time departure board for a station |
-| `trenitalia_monitora_arrivi` | Real-time arrival board for a station |
-| `trenitalia_traccia_treno` | Full telemetry for a single train (position, delay, stops) |
-| `trenitalia_orari_tra_stazioni` | Schedules between two stations with live verification and real-time delays |
+Example questions:
 
-All tools accept plain names (e.g. `"Tuscolana"`, `"Roma Termini"`) as well as technical IDs (`"S08408"`).
+> Which direct Trenitalia and Italo trains leave Roma Termini for Milano Centrale tomorrow after 08:00?
+>
+> What is the current status of Italo 8908?
+>
+> Do the downloaded timetables cover my travel date?
 
----
+## Install
 
-## How it works
-
-### Data sources
-
-**Viaggiatreno (real-time)**
-Trenitalia's unofficial API for live data: departures, arrivals, train position and delay.
-
-**NeTEx (offline timetable)**
-NeTEx Italian Profile file published by IT-RAP, containing 25,480 train journeys with stops and schedules. Used as the primary source for `orari_tra_stazioni`.
-
-### Hybrid logic for `orari_tra_stazioni`
-
-1. **NeTEx offline** — finds all journeys connecting station A to station B on the requested day, filtered by weekday and validity period
-2. **Live cross-check** — for journeys departing within the next 90 minutes, verifies the train actually appears on the Viaggiatreno departure board (removes "ghost trains" present in NeTEx but not actually stopping at that station)
-3. **Real-time delay enrichment** — enriches each journey with the current delay from Viaggiatreno, parallelised with `asyncio.gather`
-4. **Viaggiatreno fallback** — if NeTEx returns no results (special services, cancellations, etc.), queries the live board directly and verifies stop-by-stop the actual route
-
----
-
-## Tech stack
-
-- **Python 3.12**
-- **[mcp\[cli\] 1.26.0](https://github.com/modelcontextprotocol/python-sdk)** — FastMCP with SSE and streamable-http transport
-- **[httpx](https://www.python-httpx.org/)** — async HTTP client for the Viaggiatreno API
-- **[pydantic v2](https://docs.pydantic.dev/)** — tool input validation
-
----
-
-## Project structure
-
-```
-server.py               # FastMCP server + 5 tools (entrypoint)
-viaggiatreno.py         # httpx client for the Viaggiatreno API
-models.py               # Pydantic v2 input models
-data/
-  stazioni.json         # Name → Viaggiatreno ID dictionary (1,610 stations)
-  timetable.json.gz     # Compressed NeTEx timetable (25,480 journeys, ~1.1 MB)
-build_stazioni.py       # Script to regenerate stazioni.json
-build_timetable.py      # Script to regenerate timetable.json.gz
-web/                    # Next.js landing page (ciuff.org)
-```
-
----
-
-## Local installation
-
-### Prerequisites
-
-- **Python 3.12+** — download from [python.org](https://www.python.org/downloads/)
-- **Git** — download from [git-scm.com](https://git-scm.com/)
-
-### 1. Clone the repo
+Requires Python 3.12 or newer. Dependencies are open source; network access is needed to download timetables and query live information.
 
 ```bash
 git clone https://github.com/Fanfulla/MCP_Trenitalia.git
 cd MCP_Trenitalia
-```
-
-### 2. Install dependencies
-
-You can use **uv** (recommended, much faster) or the standard **pip**.
-
-#### With uv (recommended)
-
-[uv](https://docs.astral.sh/uv/) is a modern Python package manager, significantly faster than pip. To install it:
-
-```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-Then, inside the project folder:
-
-```bash
-uv venv && uv pip install -r requirements.txt
-```
-
-#### With pip (alternative)
-
-If you prefer not to install uv, the standard pip works just fine:
-
-```bash
 python -m venv .venv
+```
 
+Activate the environment:
+
+```powershell
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+```
+
+```bash
 # macOS / Linux
 source .venv/bin/activate
-
-# Windows
-.venv\Scripts\activate
-
-pip install -r requirements.txt
 ```
 
----
-
-## Running the server
+Then install and download current validated timetables:
 
 ```bash
-# stdio mode — for Claude Desktop / Cursor / local IDEs
+python -m pip install -r requirements.txt
+python update_data.py
+```
+
+With [uv](https://docs.astral.sh/uv/), `uv venv` and `uv pip install -r requirements.txt` are alternatives.
+
+Timetable caches are created under `data/` and are not distributed in this repository. The first download can take a few minutes. Live tools can still run without the caches; schedule tools report missing or invalid coverage explicitly.
+
+## Run and connect
+
+```bash
+# Local MCP client
 python server.py
 
-# HTTP mode — for remote deploy or Claude Web
-python server.py --http
+# Recommended HTTP transport: POST /mcp
+python server.py --streamable-http
+
+# Existing SSE clients: GET /sse and POST /messages/
+python server.py --sse
 ```
 
-In `--http` mode the server exposes the MCP endpoint at:
-- `POST /mcp` (streamable-http transport)
+`--http` remains an alias for **legacy SSE**, preserving the original runtime behavior. Older README versions incorrectly described that flag as Streamable HTTP.
 
-Default port: `8000` (override with the `PORT` environment variable).
+Example stdio client configuration on Windows:
 
----
-
-## Claude Desktop setup
-
-Claude Desktop reads its configuration from a JSON file. Open or create `claude_desktop_config.json`:
-
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-
-Add the `mcpServers` section:
-
-**macOS / Linux:**
 ```json
 {
   "mcpServers": {
     "MCP Trenitalia": {
-      "command": "/absolute/path/to/.venv/bin/python",
-      "args": ["/absolute/path/to/server.py"]
+      "command": "C:\\path\\to\\MCP_Trenitalia\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\path\\to\\MCP_Trenitalia\\server.py"]
     }
   }
 }
 ```
 
-**Windows:**
+On macOS/Linux, use absolute paths to `.venv/bin/python` and `server.py`. For HTTP clients, select the matching transport and connect to `http://127.0.0.1:8000/mcp` or `http://127.0.0.1:8000/sse`.
+
+## Tools
+
+The five original names and nested `params` input envelope remain available.
+
+| Tool | Purpose |
+|---|---|
+| `trenitalia_cerca_stazione` | Local station lookup with Viaggiatreno fallback |
+| `trenitalia_monitora_partenze` | Live Trenitalia departures |
+| `trenitalia_monitora_arrivi` | Live Trenitalia arrivals |
+| `trenitalia_traccia_treno` | Live Trenitalia train details with origin station |
+| `trenitalia_orari_tra_stazioni` | Date-aware direct Trenitalia journeys and today's live enrichment |
+| `ciuff_cerca_stazioni` | Station search across one or both operators |
+| `ciuff_cerca_viaggi` | Direct scheduled journeys across one or both operators |
+| `ciuff_stato_treno` | Public train status for an explicitly selected operator |
+| `italo_tabellone` | Italo arrivals or departures by station name or Italo code |
+| `ciuff_stato_fonti` | Local timetable coverage and provenance, not upstream uptime |
+| `ciuff_link_biglietti` | Official purchase-site links, with prices explicitly unavailable |
+
+The six new tools return MCP structured content. Example arguments for `ciuff_cerca_viaggi`:
+
 ```json
 {
-  "mcpServers": {
-    "MCP Trenitalia": {
-      "command": "C:\\absolute\\path\\to\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\absolute\\path\\to\\server.py"]
-    }
+  "params": {
+    "stazione_a": "Roma Termini",
+    "stazione_b": "Milano Centrale",
+    "data": "2026-09-28",
+    "orario_da": "08:00",
+    "operatore": "all",
+    "limite": 10
   }
 }
 ```
 
-> **Note**: use absolute paths. Restart Claude Desktop after saving the file.
+`operatore` accepts `all`, `trenitalia` or `italo` for station/journey searches. Train status requires a specific operator and `numero_treno`. `ciuff_stato_fonti` takes no arguments. Station IDs belong to their source; use names to search both operators. Ambiguous names return choices instead of selecting the first match.
 
----
+## Sources and freshness
 
-## Deploy to Railway
-
-The repo includes a ready-made `Procfile` for [Railway](https://railway.app/):
-
-```
-web: python server.py --http
-```
-
-Just connect the GitHub repo to a new Railway project — deploys are automatic. The `PORT` variable is injected automatically by Railway.
-
----
-
-## Environment variables
-
-| Variable | Default | Description |
+| Data | Source | Limits |
 |---|---|---|
-| `PORT` | `8000` | HTTP server port |
-| `MCP_HOST` | `0.0.0.0` | Binding host |
-| `LOG_LEVEL` | `info` | Log level |
+| Trenitalia schedules | [National NeTEx feed, CCISS](https://www.cciss.it/nap/mmtis/public/catalog/Asset/1080596) | Static schedules with service calendars and validity periods |
+| Italo schedules | [NeTEx feed, CCISS](https://www.cciss.it/nap/mmtis/public/catalog/Dataset/1813935) | Direct rail services; combined itineraries are excluded |
+| Trenitalia live information | [Viaggiatreno](http://www.viaggiatreno.it/) | Undocumented public endpoints, currently accessed over HTTP |
+| Italo live information | [Italo In Viaggio](https://italoinviaggio.italotreno.com/) | Undocumented public endpoints, without a reliable service-date field |
 
----
+Live verification on **2026-09-27** found:
 
-## Notes
+- Trenitalia feed published on 2026-09-25, valid 2026-09-26 through 2026-12-12.
+- Italo feed published on 2026-09-26, valid 2026-09-25 through 2027-02-02.
+- Both feeds returned direct Roma Termini to Milano Centrale journeys.
+- Both public live-information adapters returned data.
 
-- The Viaggiatreno API is unofficial and undocumented — the server handles all anomalous responses defensively
-- The NeTEx file is valid for the period **2025-12-14 → 2026-06-13** — to update it, run `build_timetable.py` with a new NeTEx file
-- Tools never raise exceptions to the client: on error they return a descriptive message in Italian
+These are verification snapshots, not guarantees of continued upstream availability. Check `ciuff_stato_fonti` for your local feed dates.
 
----
+```bash
+# Refresh all, or just one provider
+python update_data.py
+python update_data.py --provider italo
+python update_data.py --provider trenitalia
+```
+
+Refresh validates the feed before atomically replacing the previous cache. A failed refresh preserves the old file; expired coverage is still reported as expired. Running servers pick up cache changes without restarting. For unattended refresh, run the command daily with your operating-system scheduler. No scheduler or subscription is installed automatically.
+
+The parser supports the Italian-profile structures in the verified feeds, including UIC calendar bits, explicit date exceptions, boarding restrictions and overnight offsets. It is not a general NeTEx implementation. Unsupported calendars, unresolved references and ambiguous/nonexistent daylight-saving wall times fail closed. Searches cover direct trains, not transfers or historic telemetry.
+
+Italo output distinguishes request time (`observed_at`) from the source update time. When the service date cannot be verified, `service_date` is null and `freshness` is `date_unverified`. Such delays are not attached to a dated scheduled journey. Missing delays remain null; they never mean "on time". Stale responses are labeled separately. Cancellation meanings are not guessed from undocumented numeric codes.
+
+## Self-hosting
+
+The server defaults to loopback. It includes a health endpoint, allowed-host checks, a per-peer request limit and an optional bearer token. Outbound requests use an in-process cache and connection pool, with bounded concurrency, response sizes and transient retries.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `8000` | HTTP listen port |
+| `MCP_HOST` | `127.0.0.1` | Bind address; use `0.0.0.0` to expose the service intentionally |
+| `LOG_LEVEL` | `info` | Uvicorn log level |
+| `MCP_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | Comma-separated hostnames, without scheme or port |
+| `MCP_RATE_LIMIT` | `60` | Requests per minute per connected peer, per process |
+| `MCP_API_KEY` | unset | Optional token required as `Authorization: Bearer ...` |
+
+Use TLS at your reverse proxy for remote access and add its hostname to `MCP_ALLOWED_HOSTS`. Forwarded client IP headers are not trusted: behind a proxy, the built-in limit applies to its address. Configure per-user limits at your proxy if needed. `/health` is token-exempt and reports process/local-cache status, not live upstream health. The optional token is static access control, not OAuth.
+
+The existing `Procfile` preserves legacy SSE. Configure `MCP_HOST` and `MCP_ALLOWED_HOSTS` for your host, or change the launch command to `python server.py --streamable-http`. The project requires no hosting subscription; operating a public host is your responsibility. The existing `web/` website remains separate.
+
+## Development
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+python -m compileall -q server.py models.py rail_service.py timetable.py build_timetable.py update_data.py viaggiatreno.py italo.py http_client.py http_app.py time_utils.py
+```
+
+Tests use local fixtures and mocked network transports. They cover calendars, midnight/DST, stale data, station ambiguity, retries, malformed responses, structured MCP output, HTTP limits and multi-client SSE cleanup. Live checks are separate from the offline suite. CI runs the offline tests on Windows and Linux.
+
+The server uses the official [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk), not the separate `fastmcp` distribution. See [CHANGELOG.md](CHANGELOG.md) for migration notes.
 
 ## License
 
-[MIT](https://github.com/Fanfulla/MCP_Trenitalia?tab=MIT-1-ov-file) — Copyright (c) 2026 Fanfulla
+Project code is [MIT licensed](LICENSE). Upstream datasets and provider responses have their own terms and are **not** relicensed under MIT. Public availability does not establish redistribution rights. Downloaded timetable caches stay local; source metadata is in [data/sources.json](data/sources.json).
+
+This independent project is unaffiliated with Trenitalia or Italo.

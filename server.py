@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Trenitalia MCP Server — server FastMCP per dati ferroviari in tempo reale.
+Trenitalia MCP Server — server MCP per dati ferroviari in tempo reale.
 
 Fornisce strumenti per:
 - Cercare stazioni per nome e ottenerne l'ID Viaggiatreno
@@ -8,20 +8,23 @@ Fornisce strumenti per:
 - Tracciare la posizione e il ritardo di un treno specifico
 
 Sorgente dati: API non ufficiale Viaggiatreno (infomobilita.trenitalia.com)
-Trasporto: stdio (default) oppure streamable_http (per deploy remoto)
+Trasporto: stdio (default) oppure Streamable HTTP e SSE legacy (per deploy remoto)
 """
 
 from __future__ import annotations
 
-import gzip
 import json
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
+from mcp_types import ToolAnnotations
+from http_client import close_clients
+from rail_service import RailService
+from time_utils import ROME, now_rome, format_viaggiatreno_time
+from italo import get_station_board
 
 from models import (
     CercaStazioneInput,
@@ -94,9 +97,12 @@ def _resolve_stazione(ref: str) -> tuple[str, str] | str:
 
     # Già un ID Viaggiatreno
     if v.upper().startswith("S") and v[1:].isdigit():
-        return (v.upper(), v.upper())
+        return (v.upper(), next((name.title() for name, sid in _STAZIONI.items() if sid == v.upper()), v.upper()))
 
     risultati = _cerca_locale(v)
+    esatti = [r for r in risultati if r["nome"].casefold() == v.casefold()]
+    if esatti:
+        risultati = esatti
 
     if len(risultati) == 1:
         return (risultati[0]["id"], risultati[0]["nome"])
@@ -113,99 +119,18 @@ def _resolve_stazione(ref: str) -> tuple[str, str] | str:
     )
 
 
-# ─── Timetable offline (NeTEx) ────────────────────────────────────────────────
-
-_TIMETABLE_FILE = Path(__file__).parent / "data" / "timetable.json.gz"
-
-_DAY_NAMES = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
-
-def _load_timetable() -> list[dict]:
-    if _TIMETABLE_FILE.exists():
-        with gzip.open(_TIMETABLE_FILE, "rt", encoding="utf-8") as f:
-            return json.load(f)
-    return []
-
-_TIMETABLE: list[dict] = _load_timetable()
-
-
-def _journeys_between(
-    stazione_a: str,
-    stazione_b: str,
-    orario_da: str = "00:00",
-    solo_oggi: bool = True,
-    data: date | None = None,
-) -> list[dict]:
-    """
-    Cerca nell'orario NeTEx tutte le corse che:
-    - fermano a stazione_a E poi a stazione_b (in quell'ordine)
-    - partono da stazione_a non prima di orario_da (HH:MM)
-    - circolano nel giorno indicato da data (default: oggi)
-
-    Restituisce lista di dict:
-      { numero, linea, dep_a, arr_b, fermate_intermedie }
-    """
-    oggi = data or date.today()
-    oggi_weekday = oggi.weekday()  # 0=Mon, 6=Sun
-    oggi_str = oggi.isoformat()
-
-    a_up = stazione_a.strip().upper()
-    b_up = stazione_b.strip().upper()
-
-    risultati = []
-    seen: set[str] = set()  # numero treno — un treno non circola due volte al giorno con lo stesso numero
-
-    for j in _TIMETABLE:
-        # Filtro giorno della settimana + periodo validità
-        if solo_oggi:
-            if oggi_weekday not in j.get("w", []):
-                continue
-            pf = j.get("pf", "")
-            pt = j.get("pt", "")
-            if pf and pt and not (pf <= oggi_str <= pt):
-                continue
-
-        stops = j["s"]  # [[nome, arrivo, partenza], ...]
-
-        # Trova indice di stazione_a e stazione_b
-        idx_a = next((i for i, s in enumerate(stops) if a_up in s[0]), -1)
-        if idx_a == -1:
-            continue
-
-        idx_b = next((i for i, s in enumerate(stops) if i > idx_a and b_up in s[0]), -1)
-        if idx_b == -1:
-            continue
-
-        dep_a = stops[idx_a][2] or stops[idx_a][1]  # partenza da A (o arrivo se no partenza)
-        arr_b = stops[idx_b][1] or stops[idx_b][2]  # arrivo a B
-
-        if dep_a < orario_da:
-            continue
-
-        # Fermate intermedie (escluse A e B)
-        intermedie = [s[0].title() for s in stops[idx_a+1:idx_b]]
-
-        if j["n"] in seen:
-            continue
-        seen.add(j["n"])
-
-        risultati.append({
-            "numero": j["n"],
-            "linea": j["l"],
-            "dep_a": dep_a,
-            "arr_b": arr_b,
-            "intermedie": intermedie,
-        })
-
-    risultati.sort(key=lambda x: x["dep_a"])
-    return risultati
+rail = RailService(Path(__file__).parent / "data", viaggiatreno_stations=_STAZIONI)
 
 
 # ─── Inizializzazione ─────────────────────────────────────────────────────────
 
-mcp = FastMCP(
+mcp = MCPServer(
     "trenitalia_mcp",
+    version="0.2.0",
     instructions=(
-        "Server MCP per dati ferroviari italiani in tempo reale via Viaggiatreno. "
+        "Orari e stato dei treni Trenitalia e Italo da fonti pubbliche gratuite. "
+        "Usa ciuff_cerca_viaggi per confrontare collegamenti diretti e ciuff_stato_fonti per la copertura. "
+        "Le tariffe live non sono disponibili; ciuff_link_biglietti restituisce solo siti ufficiali. "
         "Flusso d'uso consigliato: 1) usa trenitalia_cerca_stazione per trovare l'ID stazione, "
         "2) usa trenitalia_monitora_partenze o trenitalia_monitora_arrivi per la bacheca, "
         "3) usa trenitalia_traccia_treno per dettagli su un singolo convoglio."
@@ -216,15 +141,7 @@ mcp = FastMCP(
 # ─── Utility di formattazione ─────────────────────────────────────────────────
 
 def _orario_viaggiatreno() -> str:
-    """
-    Restituisce il timestamp nel formato richiesto dall'API Viaggiatreno.
-    Es: 'Wed Dec 04 2024 10:30:00 GMT+0100'
-    URL-encoded: 'Wed%20Dec%2004%202024%2010%3A30%3A00%20GMT%2B0100'
-    """
-    now = datetime.now()
-    # Formato che accetta Viaggiatreno
-    raw = now.strftime("%a %b %d %Y %H:%M:%S GMT+0100")
-    return quote(raw)
+    return format_viaggiatreno_time()
 
 
 def _format_ritardo(ritardo: Any) -> str:
@@ -273,13 +190,13 @@ def _handle_error(e: Exception, contesto: str = "") -> str:
 
 @mcp.tool(
     name="trenitalia_cerca_stazione",
-    annotations={
+    annotations=ToolAnnotations(**{
         "title": "Cerca Stazione Trenitalia",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+        "read_only_hint": True,
+        "destructive_hint": False,
+        "idempotent_hint": True,
+        "open_world_hint": True,
+    }),
 )
 async def trenitalia_cerca_stazione(params: CercaStazioneInput) -> str:
     """Cerca stazioni ferroviarie italiane per nome e restituisce il loro ID Viaggiatreno.
@@ -338,13 +255,13 @@ async def trenitalia_cerca_stazione(params: CercaStazioneInput) -> str:
 
 @mcp.tool(
     name="trenitalia_monitora_partenze",
-    annotations={
+    annotations=ToolAnnotations(**{
         "title": "Monitora Partenze da Stazione",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+        "read_only_hint": True,
+        "destructive_hint": False,
+        "idempotent_hint": False,
+        "open_world_hint": True,
+    }),
 )
 async def trenitalia_monitora_partenze(params: MonitoraPartenzeInput) -> str:
     """Mostra la bacheca partenze in tempo reale di una stazione ferroviaria italiana.
@@ -389,7 +306,7 @@ async def trenitalia_monitora_partenze(params: MonitoraPartenzeInput) -> str:
         treni = treni[: params.limite]
 
         righe = [f"## 🚉 Partenze da {nome_display} (`{id_stazione}`)\n"]
-        righe.append(f"_Aggiornato: {datetime.now().strftime('%H:%M:%S')} — {len(treni)} treni mostrati_\n")
+        righe.append(f"_Aggiornato: {now_rome().strftime('%H:%M:%S')} — {len(treni)} treni mostrati_\n")
 
         for t in treni:
             try:
@@ -402,7 +319,7 @@ async def trenitalia_monitora_partenze(params: MonitoraPartenzeInput) -> str:
                 # Converti timestamp ms → ora leggibile
                 if orario_partenza.isdigit():
                     ts = int(orario_partenza) / 1000
-                    orario_partenza = datetime.fromtimestamp(ts).strftime("%H:%M")
+                    orario_partenza = datetime.fromtimestamp(ts, ROME).strftime("%H:%M")
 
                 # Binario
                 bin_prog = t.get("binarioProgrammatoPartenzaDescrizione") or t.get("binarioPartenza")
@@ -438,13 +355,13 @@ async def trenitalia_monitora_partenze(params: MonitoraPartenzeInput) -> str:
 
 @mcp.tool(
     name="trenitalia_monitora_arrivi",
-    annotations={
+    annotations=ToolAnnotations(**{
         "title": "Monitora Arrivi in Stazione",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+        "read_only_hint": True,
+        "destructive_hint": False,
+        "idempotent_hint": False,
+        "open_world_hint": True,
+    }),
 )
 async def trenitalia_monitora_arrivi(params: MonitoraArriviInput) -> str:
     """Mostra la bacheca arrivi in tempo reale di una stazione ferroviaria italiana.
@@ -486,7 +403,7 @@ async def trenitalia_monitora_arrivi(params: MonitoraArriviInput) -> str:
         treni = treni[: params.limite]
 
         righe = [f"## 🚉 Arrivi a {nome_display} (`{id_stazione}`)\n"]
-        righe.append(f"_Aggiornato: {datetime.now().strftime('%H:%M:%S')} — {len(treni)} treni mostrati_\n")
+        righe.append(f"_Aggiornato: {now_rome().strftime('%H:%M:%S')} — {len(treni)} treni mostrati_\n")
 
         for t in treni:
             try:
@@ -498,7 +415,7 @@ async def trenitalia_monitora_arrivi(params: MonitoraArriviInput) -> str:
 
                 if orario_arrivo.isdigit():
                     ts = int(orario_arrivo) / 1000
-                    orario_arrivo = datetime.fromtimestamp(ts).strftime("%H:%M")
+                    orario_arrivo = datetime.fromtimestamp(ts, ROME).strftime("%H:%M")
 
                 bin_prog = t.get("binarioProgrammatoArrivoDescrizione") or t.get("binarioArrivo")
                 bin_eff = t.get("binarioEffettivoArrivoDescrizione")
@@ -522,13 +439,13 @@ async def trenitalia_monitora_arrivi(params: MonitoraArriviInput) -> str:
 
 @mcp.tool(
     name="trenitalia_traccia_treno",
-    annotations={
+    annotations=ToolAnnotations(**{
         "title": "Traccia Treno in Tempo Reale",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+        "read_only_hint": True,
+        "destructive_hint": False,
+        "idempotent_hint": False,
+        "open_world_hint": True,
+    }),
 )
 async def trenitalia_traccia_treno(params: TracciaTrenoInput) -> str:
     """Traccia la posizione e il ritardo di un treno specifico in tempo reale.
@@ -585,7 +502,7 @@ async def trenitalia_traccia_treno(params: TracciaTrenoInput) -> str:
 
         righe = [
             f"## 🚆 {categoria} {numero}: {origine} → {destinazione}\n",
-            f"**Ultimo rilevamento GPS**: {ultima_stazione}",
+            f"**Ultima stazione rilevata**: {ultima_stazione}",
             f"**Ritardo attuale**: {ritardo_attuale}",
             f"**Stato**: {'✅ ARRIVATO a destinazione' if arrivato else '🔄 IN VIAGGIO'}\n",
         ]
@@ -625,7 +542,7 @@ async def trenitalia_traccia_treno(params: TracciaTrenoInput) -> str:
                     def _ts_to_hm(ts_val: Any) -> str:
                         v = _safe_str(ts_val)
                         if v.isdigit() and int(v) > 0:
-                            return datetime.fromtimestamp(int(v) / 1000).strftime("%H:%M")
+                            return datetime.fromtimestamp(int(v) / 1000, ROME).strftime("%H:%M")
                         return "—"
 
                     arr_prog = _ts_to_hm(f.get("arrivo_teorico"))
@@ -665,252 +582,115 @@ from models import OrariTraStazioniInput  # noqa: E402 — import locale
 
 @mcp.tool(
     name="trenitalia_orari_tra_stazioni",
-    annotations={
+    annotations=ToolAnnotations(**{
         "title": "Orari Treni tra Due Stazioni",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": False,
-        "openWorldHint": True,
-    },
+        "read_only_hint": True,
+        "destructive_hint": False,
+        "idempotent_hint": False,
+        "open_world_hint": True,
+    }),
 )
 async def trenitalia_orari_tra_stazioni(params: OrariTraStazioniInput) -> str:
-    """Trova tutti i treni che passano da una stazione A a una stazione B in una data ora.
+    """Cerca collegamenti diretti Trenitalia per data; ritardi solo per la corsa odierna."""
+    result = await rail.search_journeys(params.stazione_a, params.stazione_b,
+        params.data, params.orario_da, "trenitalia", params.limite)
+    if result["choices"]:
+        choices = "\n".join(f"- {s['name']} (`{s['id']}`)" for s in result["choices"])
+        return "Specifica la stazione:\n" + choices
+    if not result["journeys"]:
+        if result["status"] == "unavailable":
+            return (f"Orario non disponibile per {result['date']}. "
+                    + " ".join(result["warnings"])
+                    + " Esegui python update_data.py per aggiornare i dati.")
+        return f"Nessun collegamento diretto trovato per {result['date']} dalle {result['after']}. " + " ".join(result["warnings"])
+    rows = [f"## Treni da {params.stazione_a} a {params.stazione_b}",
+        f"Orario programmato del {result['date']} dalle {result['after']} (Europe/Rome).",
+        "| Treno | Partenza | Arrivo | Ritardo live | Fermate intermedie |",
+        "|---|---|---|---|---|"]
+    for item in result["journeys"]:
+        departure = datetime.fromisoformat(item["departure"]).strftime("%d/%m %H:%M")
+        arrival = datetime.fromisoformat(item["arrival"]).strftime("%d/%m %H:%M")
+        delay = _format_ritardo(item["live"].get("delay_minutes"))
+        rows.append(f"| {item['train_number']} | {departure} | {arrival} | {delay} | {', '.join(item['intermediate_stops']) or '-'} |")
+    rows.extend(result["warnings"])
+    rows.append("Fonte orari: NAP CCISS. I dati live non disponibili non indicano puntualità.")
+    return "\n".join(rows)
 
-    Usa l'orario teorico NeTEx (offline) per trovare le corse, poi arricchisce
-    ciascun treno con ritardo real-time da Viaggiatreno (se disponibile).
-    Risolve nomi in chiaro (es. 'Tuscolana', 'Ponte Galeria') automaticamente.
 
-    Args:
-        params (OrariTraStazioniInput):
-            - stazione_a: stazione di salita (nome o ID)
-            - stazione_b: stazione di discesa (nome o ID)
-            - orario_da: orario minimo di partenza da A, formato HH:MM (default: ora attuale)
-            - limite: max treni da mostrare (default 10)
+from models import CercaStazioniInput, CercaViaggiInput, StatoTrenoInput, TabelloneItaloInput
 
-    Returns:
-        Tabella markdown con: numero treno, linea, partenza da A, arrivo a B,
-        fermate intermedie, ritardo real-time (se disponibile).
-    """
+READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False,
+                            idempotent_hint=True, open_world_hint=True)
+
+
+@mcp.tool(annotations=READ_ONLY, structured_output=True)
+async def ciuff_cerca_stazioni(params: CercaStazioniInput) -> dict[str, Any]:
+    """Cerca stazioni Trenitalia/Italo. Gli ID sono specifici dell'operatore."""
+    return rail.stations(params.query, params.operatore, params.limite)
+
+
+@mcp.tool(annotations=READ_ONLY, structured_output=True)
+async def ciuff_cerca_viaggi(params: CercaViaggiInput) -> dict[str, Any]:
+    """Confronta collegamenti diretti programmati Trenitalia e Italo per data. Nessun prezzo live."""
+    return await rail.search_journeys(params.stazione_a, params.stazione_b,
+        params.data, params.orario_da, params.operatore, params.limite)
+
+
+@mcp.tool(annotations=READ_ONLY, structured_output=True)
+async def ciuff_stato_treno(params: StatoTrenoInput) -> dict[str, Any]:
+    """Consulta lo stato pubblico del treno, con fonte e limiti sulla data del rilevamento."""
+    return await rail.train_status(params.operatore, params.numero_treno)
+
+
+@mcp.tool(annotations=READ_ONLY, structured_output=True)
+async def italo_tabellone(params: TabelloneItaloInput) -> dict[str, Any]:
+    """Tabellone pubblico Italo. La data del servizio può non essere fornita dalla fonte."""
     try:
-        # Risolvi nomi stazione → nome canonico NeTEx (UPPERCASE)
-        def _resolve_name(ref: str) -> str | None:
-            """Restituisce il nome NeTEx uppercase, o None se non risolto."""
-            r = _cerca_locale(ref)
-            if r:
-                return r[0]["nome"].upper()
-            return ref.strip().upper()
-
-        nome_a = _resolve_name(params.stazione_a)
-        nome_b = _resolve_name(params.stazione_b)
-
-        # Risolvi la data: usa params.data se fornita, altrimenti oggi
-        if params.data:
-            from datetime import date as _date
-            data_query = _date.fromisoformat(params.data)
-        else:
-            data_query = date.today()
-
-        orario_da = params.orario_da or (datetime.now().strftime("%H:%M") if data_query == date.today() else "00:00")
-
-        ms_oggi = str(int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000))
-        _VT_BASE = "http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno"
-        _VT_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; trenitalia-mcp/1.0)"}
-
-        import asyncio as _asyncio
-
-        async def _fetch_ritardo(client: httpx.AsyncClient, numero: str) -> str:
-            """Recupera il ritardo real-time per un numero treno. Restituisce stringa."""
-            try:
-                nr = await client.get(f"{_VT_BASE}/cercaNumeroTreno/{numero}")
-                if nr.status_code != 200:
-                    return "–"
-                cod_orig = nr.json().get("codLocOrig", "")
-                if not cod_orig:
-                    return "–"
-                at = await client.get(f"{_VT_BASE}/andamentoTreno/{cod_orig}/{numero}/{ms_oggi}")
-                if at.status_code != 200:
-                    return "–"
-                return _format_ritardo(_safe_int(at.json().get("ritardo"), default=-99))
-            except Exception:
-                return "–"
-
-        # ── Fonte primaria: NeTEx offline ─────────────────────────────────────
-        corse = _journeys_between(nome_a, nome_b, orario_da=orario_da, data=data_query)
-        fonte = "NeTEx"
-
-        # ── Cross-check live: rimuove treni NeTEx che non fermano davvero oggi ─
-        # Solo per query odierne (la bacheca live non copre giorni futuri).
-        # La bacheca live copre circa 90 minuti da ora: filtriamo solo i treni
-        # che rientrano in quella finestra; quelli oltre vengono tenuti da NeTEx.
-        if corse and data_query == date.today():
-            risolto_a = _resolve_stazione(params.stazione_a)
-            if isinstance(risolto_a, tuple):
-                id_a, _ = risolto_a
-                try:
-                    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0), headers=_VT_HEADERS) as cl:
-                        partenze_live = await get_partenze(id_a, _orario_viaggiatreno())
-                    if partenze_live:
-                        numeri_live = {_safe_str(t.get("numeroTreno", "")) for t in partenze_live}
-                        # Finestra live: ora + 90 min (formato HH:MM per confronto stringa)
-                        from datetime import timedelta
-                        ora_fine_live = (datetime.now() + timedelta(minutes=90)).strftime("%H:%M")
-                        corse_filtrate = []
-                        rimossi = 0
-                        for c in corse:
-                            if c["dep_a"] <= ora_fine_live:
-                                # Nella finestra live → cross-check
-                                if c["numero"] in numeri_live:
-                                    corse_filtrate.append(c)
-                                else:
-                                    rimossi += 1  # fantasma NeTEx, non ferma davvero qui
-                            else:
-                                # Oltre la finestra live → tieni dal NeTEx senza filtrare
-                                corse_filtrate.append(c)
-                        if rimossi > 0:
-                            corse = corse_filtrate
-                            fonte = "NeTEx+live"
-                except Exception:
-                    pass  # Live non disponibile: usa NeTEx senza filtro
-
-        # ── Fallback: Viaggiatreno real-time (treni extra-orario / post-NeTEx) ─
-        if not corse:
-            risolto_a = _resolve_stazione(params.stazione_a)
-            if isinstance(risolto_a, tuple):
-                id_a, _ = risolto_a
-                try:
-                    async with httpx.AsyncClient(timeout=httpx.Timeout(8.0), headers=_VT_HEADERS) as client:
-                        treni_rt = await get_partenze(id_a, _orario_viaggiatreno())
-
-                        async def _check_ferma_a_b(client: httpx.AsyncClient, t: dict) -> dict | None:
-                            numero = _safe_str(t.get("numeroTreno", ""))
-                            cod_orig = _safe_str(t.get("codOrigine", ""))
-                            if not numero or not cod_orig:
-                                return None
-                            try:
-                                at = await client.get(
-                                    f"{_VT_BASE}/andamentoTreno/{cod_orig}/{numero}/{ms_oggi}"
-                                )
-                                if at.status_code != 200:
-                                    return None
-                                dati = at.json()
-                                fermate = dati.get("fermate") or []
-                                nomi = [_safe_str(f.get("stazione", "")).upper() for f in fermate]
-
-                                # Trova posizione di A e B nel percorso reale
-                                idx_a = next((i for i, n in enumerate(nomi) if nome_a in n), -1)
-                                idx_b = next((i for i, n in enumerate(nomi) if i > idx_a and nome_b in n), -1)
-                                if idx_a == -1 or idx_b == -1:
-                                    return None
-
-                                dep_a_ms = fermate[idx_a].get("partenza_teorica") or fermate[idx_a].get("arrivo_teorico")
-                                arr_b_ms = fermate[idx_b].get("arrivo_teorico") or fermate[idx_b].get("partenza_teorica")
-
-                                def _ms_to_hm(v: Any) -> str:
-                                    s = _safe_str(v)
-                                    if s.isdigit() and int(s) > 0:
-                                        return datetime.fromtimestamp(int(s) / 1000).strftime("%H:%M")
-                                    return "–"
-
-                                dep_a = _ms_to_hm(dep_a_ms)
-                                arr_b = _ms_to_hm(arr_b_ms)
-
-                                if dep_a < orario_da:
-                                    return None
-
-                                intermedie = [
-                                    fermate[i].get("stazione", "").title()
-                                    for i in range(idx_a + 1, idx_b)
-                                ]
-                                ritardo = _format_ritardo(_safe_int(dati.get("ritardo"), default=-99))
-                                categoria = _safe_str(dati.get("categoriaDescrizione") or t.get("categoriaDescrizione", "REG"))
-
-                                return {
-                                    "numero": numero,
-                                    "linea": categoria,
-                                    "dep_a": dep_a,
-                                    "arr_b": arr_b,
-                                    "intermedie": intermedie,
-                                    "ritardo": ritardo,
-                                }
-                            except Exception:
-                                return None
-
-                        risultati = await _asyncio.gather(
-                            *[_check_ferma_a_b(client, t) for t in treni_rt]
-                        )
-                        corse_rt = sorted(
-                            [r for r in risultati if r is not None],
-                            key=lambda x: x["dep_a"],
-                        )
-
-                        if corse_rt:
-                            corse_rt = corse_rt[: params.limite]
-                            righe = [
-                                f"## 🚆 Treni da **{nome_a.title()}** a **{nome_b.title()}**\n",
-                                f"_Dati real-time Viaggiatreno (treno non presente nel NeTEx) — da {orario_da}_\n",
-                                "| Treno | Linea | Part. da A | Arr. a B | Ritardo | Fermate intermedie |",
-                                "|---|---|---|---|---|---|",
-                            ]
-                            for c in corse_rt:
-                                intermedie_str = ", ".join(c["intermedie"]) if c["intermedie"] else "–"
-                                righe.append(
-                                    f"| **{c['numero']}** | {c['linea']} "
-                                    f"| {c['dep_a']} | {c['arr_b']} "
-                                    f"| {c['ritardo']} | {intermedie_str} |"
-                                )
-                            return "\n".join(righe)
-
-                except Exception:
-                    pass
-
-            return (
-                f"Nessun treno trovato da **{nome_a.title()}** a **{nome_b.title()}** "
-                f"dopo le {orario_da} oggi, né nel NeTEx né in Viaggiatreno real-time.\n"
-                "Verifica i nomi delle stazioni o prova con un orario precedente."
-            )
-
-        corse = corse[: params.limite]
-
-        # Tutte le chiamate real-time in parallelo
-        async with httpx.AsyncClient(timeout=httpx.Timeout(6.0), headers=_VT_HEADERS) as client:
-            ritardi = await _asyncio.gather(*[_fetch_ritardo(client, c["numero"]) for c in corse])
-
-        data_label = data_query.strftime("%A %d/%m/%Y")
-        fonte_label = "NeTEx verificato live + ritardo real-time" if fonte == "NeTEx+live" else "Orario teorico NeTEx + ritardo real-time"
-        righe = [
-            f"## 🚆 Treni da **{nome_a.title()}** a **{nome_b.title()}**\n",
-            f"_{fonte_label} — {data_label} dalle {orario_da}_\n",
-            "| Treno | Linea | Part. da A | Arr. a B | Ritardo | Fermate intermedie |",
-            "|---|---|---|---|---|---|",
-        ]
-
-        for corsa, ritardo_str in zip(corse, ritardi):
-            intermedie = ", ".join(corsa["intermedie"]) if corsa["intermedie"] else "–"
-            righe.append(
-                f"| **{corsa['numero']}** | {corsa['linea'] or '–'} "
-                f"| {corsa['dep_a']} | {corsa['arr_b']} "
-                f"| {ritardo_str} | {intermedie} |"
-            )
-
-        return "\n".join(righe)
-
-    except Exception as e:
-        return _handle_error(e, "orari_tra_stazioni")
+        return await get_station_board(params.stazione, kind=params.tipo)
+    except Exception as exc:
+        return {"status": "unavailable", "provider": "italo",
+                "error_code": getattr(exc, "code", "upstream_unavailable"),
+                "source_url": "https://italoinviaggio.italotreno.com/"}
 
 
-# ─── Entrypoint ───────────────────────────────────────────────────────────────
+@mcp.tool(annotations=READ_ONLY, structured_output=True)
+async def ciuff_stato_fonti() -> dict[str, Any]:
+    """Mostra validità e provenienza degli orari locali; non effettua un controllo live dei provider."""
+    return {"sources": rail.sources(), "observed_at": now_rome().isoformat(),
+            "live_health_checked": False, "refresh_command": "python update_data.py"}
+
+
+@mcp.tool(annotations=READ_ONLY, structured_output=True)
+async def ciuff_link_biglietti(params: OrariTraStazioniInput) -> dict[str, Any]:
+    """Fornisce i siti ufficiali per prezzi e biglietti; nessuna tariffa o disponibilità è verificata."""
+    return rail.ticket_links(params.stazione_a, params.stazione_b,
+                             params.data or now_rome().date().isoformat())
+
 
 if __name__ == "__main__":
-    import sys
+    import argparse
+    import os
+    import uvicorn
+    from http_app import create_http_app
 
-    if "--http" in sys.argv:
-        # Deploy remoto: avvia come server HTTP su porta 8000
-        # Configurabile con variabile PORT
-        import os
-        import uvicorn
-        port = int(os.environ.get("PORT", 8000))
-        print(f"[trenitalia_mcp] Avvio in modalità SSE su porta {port}", file=sys.stderr)
-        uvicorn.run(mcp.sse_app(), host="0.0.0.0", port=port)
+    parser = argparse.ArgumentParser(description="Ciuff: free Italian railway MCP")
+    transports = parser.add_mutually_exclusive_group()
+    transports.add_argument("--http", action="store_true", help="Legacy SSE (backward compatible)")
+    transports.add_argument("--sse", action="store_true", help="Legacy SSE")
+    transports.add_argument("--streamable-http", action="store_true", help="Streamable HTTP at /mcp")
+    args = parser.parse_args()
+    if args.http or args.sse or args.streamable_http:
+        host = os.environ.get("MCP_HOST", "127.0.0.1")
+        app = create_http_app(mcp, rail, legacy_sse=args.http or args.sse)
+        uvicorn.run(app, host=host, port=int(os.environ.get("PORT", "8000")),
+                    log_level=os.environ.get("LOG_LEVEL", "info").lower(), proxy_headers=False)
     else:
-        # Default: stdio (per Claude Desktop, Cursor, ecc.)
-        mcp.run()
+        import asyncio
+
+        async def run_stdio():
+            try:
+                await mcp.run_stdio_async()
+            finally:
+                await close_clients()
+
+        asyncio.run(run_stdio())
