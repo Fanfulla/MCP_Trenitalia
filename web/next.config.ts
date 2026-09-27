@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  experimental: { globalNotFound: true },
+  experimental: { globalNotFound: true, inlineCss: true },
   async headers() {
     return [
       {

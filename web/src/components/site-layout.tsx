@@ -1,9 +1,19 @@
+import type { Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { Locale } from "@/lib/i18n";
+import { THEME_COLORS } from "@/lib/site";
 import "@/app/globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+
+export const siteViewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: THEME_COLORS.light },
+    { media: "(prefers-color-scheme: dark)", color: THEME_COLORS.dark },
+  ],
+  colorScheme: "light dark",
+};
 
 export function SiteLayout({ children, locale }: { children: React.ReactNode; locale: Locale }) {
   return (
