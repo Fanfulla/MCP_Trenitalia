@@ -18,6 +18,8 @@
 
 ### Fixed
 
+- Keep the mobile demo video in its native portrait aspect ratio at desktop, tablet and phone widths.
+
 - Global NeTEx validity was lost during conversion, allowing the old June 2026 timetable to appear current.
 - Future journeys could receive today's live delays and departure-board fallback.
 - Fixed-offset and server-local time calculations now use `Europe/Rome`.
