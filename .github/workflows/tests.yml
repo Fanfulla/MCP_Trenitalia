@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
         python: ['3.12', '3.13']
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -24,10 +24,10 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pytest -q
-      - run: python -m compileall -q server.py models.py rail_service.py timetable.py build_timetable.py update_data.py viaggiatreno.py italo.py http_client.py http_app.py time_utils.py
+      - run: python -m compileall -q server.py models.py rail_service.py timetable.py build_timetable.py build_stazioni.py update_data.py check_sources.py viaggiatreno.py italo.py http_client.py http_app.py time_utils.py
 
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
