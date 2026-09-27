@@ -1,18 +1,11 @@
 import type { MetadataRoute } from "next";
+import { CONTENT_UPDATED } from "@/lib/site";
+import { languageUrls } from "@/lib/seo";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [
-    {
-      url: "https://ciuff.org",
-      lastModified: new Date(),
-      changeFrequency: "weekly",
-      priority: 1,
-      alternates: {
-        languages: {
-          it: "https://ciuff.org",
-          en: "https://ciuff.org",
-        },
-      },
-    },
-  ];
+  return [languageUrls.it, languageUrls.en].map((url) => ({
+    url,
+    lastModified: CONTENT_UPDATED,
+    alternates: { languages: languageUrls },
+  }));
 }

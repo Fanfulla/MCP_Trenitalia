@@ -27,8 +27,10 @@ export default function Icon() {
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-          <line x1="4" y1="22" x2="4" y2="15" />
+          <rect x="5" y="3" width="14" height="14" rx="3" />
+          <path d="M5 10h14M8 17l-2 4M16 17l2 4M8 21h8" />
+          <circle cx="8.5" cy="13.5" r=".5" fill="white" />
+          <circle cx="15.5" cy="13.5" r=".5" fill="white" />
         </svg>
       </div>
     ),

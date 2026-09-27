@@ -4,6 +4,10 @@
 
 ### Added
 
+- Updated the existing website with Trenitalia and Italo content, GitHub and X links, and lightweight interactive controls.
+- Added separately rendered Italian and English pages, localized metadata, matching FAQ structured data and a social preview image.
+- Added served-page SEO checks and web build/lint/type checks to CI.
+
 - Free Italo train status and station boards using endpoints verified against the official public site.
 - Cross-operator station and direct-journey searches, source coverage and official ticket-site links.
 - Structured MCP output for the six new tools.
@@ -23,6 +27,9 @@
 - Individual SSE disconnects no longer close the shared pool used by other clients.
 
 ### Changed
+
+- Updated Next.js and React, removed unused animation code and deferred demo video downloads.
+- Corrected the old translation of Trenitalia as generic "Italian trains" throughout the website.
 
 - Migrated from official MCP Python SDK 1.26.0 to 2.2.0.
 - Kept the five original tool names and nested `params` inputs. `--http` remains legacy SSE; `--sse` makes that choice explicit.
