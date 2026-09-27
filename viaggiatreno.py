@@ -1,125 +1,143 @@
-"""
-Client asincrono per le API non ufficiali di Viaggiatreno (Trenitalia).
-Gestisce tutte le chiamate HTTP con timeout, retry e defensive parsing.
-"""
+"""Free public Viaggiatreno endpoints, without a supported public API contract."""
 
-from typing import Any, Optional
-import httpx
+from __future__ import annotations
 
-# ─── Costanti ────────────────────────────────────────────────────────────────
+from datetime import date, datetime, time
+import json
+import re
+from typing import Any
+from urllib.parse import quote, unquote
+from zoneinfo import ZoneInfo
 
+from http_client import UpstreamError, get_json, get_text
+
+# HTTPS was not reachable in live verification; this is the public site's URL.
 BASE_URL = "http://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno"
-TIMEOUT_SECONDS = 10.0
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; trenitalia-mcp/1.0)",
-    "Accept": "application/json",
-}
+ROME = ZoneInfo("Europe/Rome")
 
-
-# ─── Client HTTP condiviso ────────────────────────────────────────────────────
-
-def _make_client() -> httpx.AsyncClient:
-    """Crea un client httpx configurato con timeout e headers standard."""
-    return httpx.AsyncClient(
-        timeout=httpx.Timeout(TIMEOUT_SECONDS),
-        headers=HEADERS,
-        follow_redirects=True,
-    )
-
-
-# ─── Helper: safe cast ────────────────────────────────────────────────────────
 
 def _safe_int(value: Any, default: int = 0) -> int:
-    """Converte in int in modo sicuro — Viaggiatreno a volte restituisce stringhe."""
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
 def _safe_str(value: Any, default: str = "") -> str:
-    """Normalizza un valore in stringa."""
+    return default if value is None else str(value).strip()
+
+
+def _path(value: str) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value) > 160:
+        raise ValueError("A nonempty path value of at most 160 characters is required")
+    return quote(value.strip(), safe="")
+
+
+def _number(value: str) -> str:
+    value = str(value).strip()
+    if not re.fullmatch(r"\d{1,6}", value):
+        raise ValueError("Train number must contain 1 to 6 digits")
+    return str(int(value))
+
+
+def _service_day(value: date | None) -> date:
     if value is None:
-        return default
-    return str(value).strip()
+        return datetime.now(ROME).date()
+    if not isinstance(value, date) or isinstance(value, datetime):
+        raise ValueError("service_date must be a date")
+    return value
 
-
-# ─── Funzioni API ─────────────────────────────────────────────────────────────
 
 async def cerca_stazione(query: str) -> list[dict]:
-    """
-    Autocomplete: cerca stazioni per nome parziale.
-    Endpoint: /cercaStazione/{query}
-    Restituisce lista di dizionari {nomeLungo, id}.
-    """
-    url = f"{BASE_URL}/cercaStazione/{query.strip()}"
-    async with _make_client() as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        raw = response.text.strip()
-        risultati = []
+    url = f"{BASE_URL}/cercaStazione/{_path(query)}"
+    text = (await get_text(url, ttl=300)).strip()
+    if not text:
+        return []
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = []
+        for line in text.splitlines():
+            name, separator, station_id = line.strip().partition("|")
+            if not separator or not name or not re.fullmatch(r"S\d{5}", station_id.strip()):
+                raise UpstreamError("malformed_payload", url) from None
+            data.append({"nomeLungo": name, "id": station_id.strip()})
+    if not isinstance(data, list):
+        raise UpstreamError("malformed_payload", url)
+    results = []
+    for item in data:
+        if not isinstance(item, dict):
+            raise UpstreamError("malformed_payload", url)
+        name = _safe_str(item.get("nomeLungo") or item.get("nome"))
+        station_id = _safe_str(item.get("id"))
+        if not name or not re.fullmatch(r"S\d{5}", station_id):
+            raise UpstreamError("malformed_payload", url)
+        results.append({"nome": name.title(), "id": station_id})
+    return results
 
-        # Prova prima il formato JSON (array di oggetti)
-        try:
-            data = response.json()
-            if isinstance(data, list):
-                for item in data:
-                    nome = _safe_str(item.get("nomeLungo") or item.get("nome"))
-                    id_st = _safe_str(item.get("id"))
-                    if nome and id_st:
-                        risultati.append({"nome": nome.title(), "id": id_st})
-                return risultati
-        except Exception:
-            pass
 
-        # Fallback: formato testo pipe-separated "NOME STAZIONE|S00000\n..."
-        for riga in raw.splitlines():
-            riga = riga.strip()
-            if "|" in riga:
-                nome, id_stazione = riga.split("|", 1)
-                risultati.append({
-                    "nome": nome.strip().title(),
-                    "id": id_stazione.strip(),
-                })
-        return risultati
+async def _board(kind: str, station_id: str, encoded_time: str) -> list[dict]:
+    url = f"{BASE_URL}/{kind}/{_path(station_id)}/{_path(unquote(encoded_time))}"
+    data = await get_json(url)
+    if data is None:
+        return []
+    if not isinstance(data, list) or any(not isinstance(item, dict) or "numeroTreno" not in item for item in data):
+        raise UpstreamError("malformed_payload", url)
+    return data
 
 
 async def get_partenze(id_stazione: str, orario: str) -> list[dict]:
-    """
-    Recupera le partenze da una stazione in un dato orario.
-    Endpoint: /partenze/{id_stazione}/{orario}
-    Formato orario atteso: 'Wed Dec 04 2024 10%3A30%3A00 GMT%2B0100'
-    In pratica passiamo il timestamp URL-encoded oppure usiamo datetime ora.
-    """
-    url = f"{BASE_URL}/partenze/{id_stazione}/{orario}"
-    async with _make_client() as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        data = response.json()
-        return data if isinstance(data, list) else []
-
-
-async def get_andamento_treno(id_stazione_origine: str, numero_treno: str) -> dict:
-    """
-    Recupera la telemetria in tempo reale di un treno.
-    Endpoint: /andamentoTreno/{id_stazione_origine}/{numero_treno}
-    """
-    url = f"{BASE_URL}/andamentoTreno/{id_stazione_origine}/{numero_treno}"
-    async with _make_client() as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        data = response.json()
-        return data if isinstance(data, dict) else {}
+    return await _board("partenze", id_stazione, orario)
 
 
 async def get_arrivi(id_stazione: str, orario: str) -> list[dict]:
-    """
-    Recupera gli arrivi a una stazione in un dato orario.
-    Endpoint: /arrivi/{id_stazione}/{orario}
-    """
-    url = f"{BASE_URL}/arrivi/{id_stazione}/{orario}"
-    async with _make_client() as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        data = response.json()
-        return data if isinstance(data, list) else []
+    return await _board("arrivi", id_stazione, orario)
+
+
+async def get_andamento_treno(id_stazione_origine: str, numero_treno: str, service_date: date | None = None) -> dict:
+    day = _service_day(service_date)
+    millis = int(datetime.combine(day, time.min, ROME).timestamp() * 1000)
+    url = f"{BASE_URL}/andamentoTreno/{_path(id_stazione_origine)}/{_number(numero_treno)}/{millis}"
+    data = await get_json(url)
+    if data is None or data == {}:
+        return {}
+    if not isinstance(data, dict) or "numeroTreno" not in data:
+        raise UpstreamError("malformed_payload", url)
+    reported_date = data.get("dataPartenza")
+    if not isinstance(reported_date, str):
+        raise UpstreamError("date_unverified", url)
+    try:
+        reported_day = date.fromisoformat(reported_date[:10])
+    except ValueError:
+        raise UpstreamError("malformed_payload", url) from None
+    if reported_day != day:
+        raise UpstreamError("date_mismatch", url)
+    if str(data["numeroTreno"]).lstrip("0") != _number(numero_treno):
+        raise UpstreamError("malformed_payload", url)
+    return data
+
+
+async def lookup_train(number: str, service_date: date | None = None) -> dict:
+    """Resolve exact number and service day before requesting raw live status."""
+    number, day = _number(number), _service_day(service_date)
+    url = f"{BASE_URL}/cercaNumeroTrenoTrenoAutocomplete/{number}"
+    text = (await get_text(url)).strip()
+    candidates = {}
+    for line in text.splitlines():
+        label, separator, key = line.partition("|")
+        match = re.fullmatch(r"(\d+)-(S\d{5})-(\d+)", key.strip())
+        if not separator or not match:
+            raise UpstreamError("malformed_payload", url)
+        train_number, origin, millis = match.groups()
+        try:
+            candidate_day = datetime.fromtimestamp(int(millis) / 1000, ROME).date()
+        except (ValueError, OverflowError, OSError):
+            raise UpstreamError("malformed_payload", url) from None
+        if str(int(train_number)) == number and candidate_day == day:
+            candidates[(origin, millis)] = {"number": number, "origin_id": origin, "service_date": day.isoformat(), "label": label.strip()}
+    if len(candidates) > 1:
+        raise UpstreamError("ambiguous", url, candidates=list(candidates.values()))
+    if not candidates:
+        return {}
+    origin, _ = next(iter(candidates))
+    return await get_andamento_treno(origin, number, day)

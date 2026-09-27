@@ -3,7 +3,7 @@ Modelli Pydantic per la validazione degli input degli strumenti MCP.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
@@ -51,7 +51,7 @@ class MonitoraPartenzeInput(BaseModel):
         min_length=2,
         max_length=100,
     )
-    limite: Optional[int] = Field(
+    limite: int = Field(
         default=10,
         description="Numero massimo di treni da restituire (default: 10, max: 30)",
         ge=1,
@@ -78,7 +78,7 @@ class MonitoraArriviInput(BaseModel):
         min_length=2,
         max_length=100,
     )
-    limite: Optional[int] = Field(
+    limite: int = Field(
         default=10,
         description="Numero massimo di treni da restituire (default: 10, max: 30)",
         ge=1,
@@ -153,7 +153,7 @@ class OrariTraStazioniInput(BaseModel):
             "dopodomani o un giorno specifico."
         ),
     )
-    limite: Optional[int] = Field(
+    limite: int = Field(
         default=10,
         description="Numero massimo di treni da mostrare (default 10, max 30)",
         ge=1,
@@ -167,10 +167,10 @@ class OrariTraStazioniInput(BaseModel):
             return None
         v = v.strip()
         try:
-            datetime.strptime(v, "%H:%M")
+            parsed = datetime.strptime(v, "%H:%M")
         except (ValueError, ImportError):
             raise ValueError("Formato orario non valido. Usa HH:MM (es. '17:30').")
-        return v
+        return parsed.strftime("%H:%M")
 
     @field_validator("data")
     @classmethod
@@ -179,7 +179,31 @@ class OrariTraStazioniInput(BaseModel):
             return None
         v = v.strip()
         try:
-            datetime.strptime(v, "%Y-%m-%d")
+            parsed = datetime.strptime(v, "%Y-%m-%d")
         except (ValueError, ImportError):
             raise ValueError("Formato data non valido. Usa YYYY-MM-DD (es. '2026-03-09').")
-        return v
+        return parsed.date().isoformat()
+
+
+class CercaStazioniInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    query: str = Field(min_length=2, max_length=256)
+    operatore: Literal["all", "trenitalia", "italo"] = "all"
+    limite: int = Field(default=20, ge=1, le=50)
+
+
+class CercaViaggiInput(OrariTraStazioniInput):
+    operatore: Literal["all", "trenitalia", "italo"] = "all"
+
+
+class StatoTrenoInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    operatore: Literal["trenitalia", "italo"]
+    numero_treno: str = Field(pattern=r"^[0-9]{1,10}$")
+
+
+class TabelloneItaloInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    stazione: str = Field(min_length=2, max_length=100,
+        description="Nome stazione o codice Italo (es. Roma Termini, Bologna Centrale).")
+    tipo: Literal["departures", "arrivals"] = "departures"

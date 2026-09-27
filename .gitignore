@@ -1,9 +1,12 @@
 .venv/
+.pytest_cache/
 __pycache__/
 *.pyc
 *.pyo
 .env
 IT-IT-TRENITALIA_L1.xml.gz
+data/timetable*.json.gz
+data/*.tmp
 .claude/
 CLAUDE.md
 docs/

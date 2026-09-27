@@ -1,10 +1,10 @@
 {
-  "name": "MCP Trenitalia",
-  "short_name": "MCP Treni",
-  "description": "Server MCP open source per dati ferroviari italiani in tempo reale",
+  "name": "Ciuff | MCP Trenitalia + Italo",
+  "short_name": "Ciuff",
+  "description": "Server MCP gratuito e open source per orari e informazioni live di Trenitalia e Italo",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0a1a",
+  "background_color": "#080b14",
   "theme_color": "#2563eb",
   "icons": [
     {
