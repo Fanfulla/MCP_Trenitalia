@@ -15,6 +15,7 @@
 - UIC calendars, explicit service-date exceptions, boarding restrictions and overnight offsets.
 - Streamable HTTP via `--streamable-http`, host allowlists, request limits and an optional bearer token.
 - Offline regression tests and Windows/Linux CI.
+- `check_sources.py` and a free daily GitHub Actions workflow that download both official feeds, exercise the live Viaggiatreno and Italo parsers, warn before timetables expire and open or close a "Controllo fonti fallito" issue.
 
 ### Fixed
 
@@ -27,6 +28,10 @@
 - The five original tools resolve stations missing from the local dictionary through Viaggiatreno search.
 - Source failures are reported as specific Italian messages instead of "Errore imprevisto (UpstreamError)".
 - Tool examples referenced the wrong Viaggiatreno IDs for Roma Termini and Napoli Centrale.
+- Requests with a missing or wrong bearer token now count towards the per-peer request limit.
+- Italo boards name the station "Roma Termini" instead of the URL slug "roma-termini".
+- Trenitalia's `--` placeholder for the last reported station is returned as null ("dato non disponibile" in text output).
+- Bologna high-speed platforms read "bin. 19 AV" instead of "bin. AV (programmato: 19 AV)" before the number is confirmed.
 - Global NeTEx validity was lost during conversion, allowing the old June 2026 timetable to appear current.
 - Future journeys could receive today's live delays and departure-board fallback.
 - Fixed-offset and server-local time calculations now use `Europe/Rome`.
@@ -41,6 +46,7 @@
 - Corrected the old translation of Trenitalia as generic "Italian trains" throughout the website.
 - Inlined the website CSS, stopped prefetching the current and alternate-language pages and switched demo posters to WebP: no render-blocking requests, 15 instead of 20 requests and 13% less transfer on first load.
 - Installation commands preselect macOS/Linux or Windows from the visitor's platform.
+- Removed four unused website dependencies, an unused helper and the superseded JPG posters. CI pins Ubuntu runners to `ubuntu-24.04`.
 
 - `build_stazioni.py` now updates `data/stazioni.json` from the local Trenitalia timetable, keeps entries it cannot verify and accepts a NeTEx code only when Viaggiatreno confirms it with a compatible name.
 
