@@ -95,5 +95,15 @@ class SearchSafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(link['search_prefilled'] is False for link in result['operators']))
 
 
+class TrenitaliaStatusTests(unittest.TestCase):
+    def test_placeholder_last_station_becomes_null(self):
+        from datetime import date
+        from rail_service import normalize_trenitalia_status
+        for value, expected in (('--', None), ('', None), (None, None), ('ROMA TIBURTINA', 'ROMA TIBURTINA')):
+            with self.subTest(value=value):
+                status = normalize_trenitalia_status({'numeroTreno': 1, 'stazioneUltimoRilevamento': value}, date(2026, 9, 27))
+                self.assertEqual(status['last_reported_station'], expected)
+
+
 if __name__ == '__main__':
     unittest.main()

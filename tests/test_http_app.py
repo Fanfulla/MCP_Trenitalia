@@ -37,6 +37,14 @@ class PublicEndpointTests(unittest.TestCase):
             response = client.post('/mcp', json={}, headers={'Authorization': 'Bearer local-test-secret'})
             self.assertNotEqual(response.status_code, 401)
 
+    def test_failed_authentication_counts_towards_rate_limit(self):
+        with TestClient(self.make_app(api_key='local-test-secret', requests_per_minute=2), base_url='http://localhost') as client:
+            self.assertEqual(client.post('/mcp', json={}).status_code, 401)
+            self.assertEqual(client.post('/mcp', json={}, headers={'Authorization': 'Bearer wrong'}).status_code, 401)
+            response = client.post('/mcp', json={}, headers={'Authorization': 'Bearer local-test-secret'})
+            self.assertEqual(response.status_code, 429)
+            self.assertEqual(response.headers['Retry-After'], '60')
+
     def test_current_protocol_lists_tools_over_http(self):
         with TestClient(self.make_app(), base_url='http://localhost') as client:
             response = client.post('/mcp', headers={'Accept': 'application/json, text/event-stream'},

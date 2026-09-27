@@ -169,10 +169,20 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.transport(handle)
         result = await italo.get_station_board("Bologna", "departures")
         self.assertEqual(result["station"]["id"], "BC_")
+        self.assertEqual(result["station"]["name"], "Bologna")
         self.assertEqual(result["trains"][0]["train_number"], "8908")
         self.assertEqual(result["trains"][0]["delay_minutes"], 10)
         self.assertIsNone(result["service_date"])
         self.assertIn("CodiceStazione=BC_", paths[1])
+
+
+class ItaloStationNameTests(unittest.TestCase):
+    def test_url_slugs_become_readable_names(self):
+        self.assertEqual(italo._station_name("roma-termini"), "Roma Termini")
+        self.assertEqual(italo._station_name("firenze-santa-maria-novella"), "Firenze Santa Maria Novella")
+        self.assertEqual(italo._station_name("reggio-emilia-av"), "Reggio Emilia AV")
+        self.assertEqual(italo._station_name("NAPOLI CENTRALE"), "NAPOLI CENTRALE")
+        self.assertIsNone(italo._station_name(None))
 
 
 if __name__ == "__main__":

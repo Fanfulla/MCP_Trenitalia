@@ -22,10 +22,6 @@ class RequestLimits:
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http' or scope['path'] == '/health':
             return await self.app(scope, receive, send)
-        headers = dict(scope.get('headers', []))
-        if self.api_key and not compare_digest(headers.get(b'authorization', b''),
-                                               f'Bearer {self.api_key}'.encode()):
-            return await JSONResponse({'error': 'unauthorized'}, status_code=401)(scope, receive, send)
         peer = scope.get('client')
         address = peer[0] if peer else 'unknown'
         current = time.monotonic()
@@ -46,6 +42,10 @@ class RequestLimits:
             return await JSONResponse({'error': 'rate_limited'}, status_code=429,
                 headers={'Retry-After': '60'})(scope, receive, send)
         bucket.append(current)
+        headers = dict(scope.get('headers', []))
+        if self.api_key and not compare_digest(headers.get(b'authorization', b''),
+                                               f'Bearer {self.api_key}'.encode()):
+            return await JSONResponse({'error': 'unauthorized'}, status_code=401)(scope, receive, send)
         return await self.app(scope, receive, send)
 
 

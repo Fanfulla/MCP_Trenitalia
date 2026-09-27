@@ -36,6 +36,11 @@ def optional_int(value: Any) -> int | None:
         return None
 
 
+def optional_text(value: Any) -> str | None:
+    text = "" if value is None else str(value).strip()
+    return None if text in {"", "--"} else text
+
+
 def normalize_trenitalia_status(raw: dict, service_date: date) -> dict:
     """Retain source timestamps and unknown values without inventing telemetry."""
     last_seen = timestamp_to_iso(raw.get("oraUltimoRilevamento"))
@@ -45,7 +50,7 @@ def normalize_trenitalia_status(raw: dict, service_date: date) -> dict:
         "source_url": LIVE_URLS["trenitalia"], "observed_at": now_rome().isoformat(),
         "source_updated_at": last_seen, "delay_minutes": optional_int(raw.get("ritardo")),
         "origin": raw.get("origine"), "destination": raw.get("destinazione"),
-        "last_reported_station": raw.get("stazioneUltimoRilevamento"),
+        "last_reported_station": optional_text(raw.get("stazioneUltimoRilevamento")),
         "arrived": raw.get("arrivato"), "not_departed": raw.get("nonPartito"),
         "disruptions": raw.get("anormalita"), "cancelled_stops": raw.get("fermateSoppresse"),
         "stops": [{

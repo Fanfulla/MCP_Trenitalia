@@ -22,7 +22,7 @@ import httpx
 from mcp.server import MCPServer
 from mcp_types import ToolAnnotations
 from http_client import UpstreamError, close_clients
-from rail_service import RailService
+from rail_service import RailService, optional_text
 from time_utils import ROME, now_rome, format_viaggiatreno_time
 from timetable import station_key
 from italo import get_station_board
@@ -173,6 +173,8 @@ def _format_binario(binario_programmato: Any, binario_effettivo: Any) -> str:
     """Mostra binario effettivo vs programmato se diversi."""
     prog = _safe_str(binario_programmato)
     eff = _safe_str(binario_effettivo)
+    if eff and not any(c.isdigit() for c in eff) and eff != prog and eff in prog.split():
+        eff = ""
     if not eff and not prog:
         return "non assegnato"
     if not eff:
@@ -525,7 +527,8 @@ async def trenitalia_traccia_treno(params: TracciaTrenoInput) -> str:
         origine = _safe_str(dati.get("origine", "N/D")).title()
         destinazione = _safe_str(dati.get("destinazione", "N/D")).title()
         ritardo_attuale = _format_ritardo(dati.get("ritardo"))
-        ultima_stazione = _safe_str(dati.get("stazioneUltimoRilevamento", "")).title() or "dato non disponibile"
+        ultima_stazione = optional_text(dati.get("stazioneUltimoRilevamento"))
+        ultima_stazione = ultima_stazione.title() if ultima_stazione else "dato non disponibile"
         arrivato = dati.get("arrivato", False)
 
         righe = [

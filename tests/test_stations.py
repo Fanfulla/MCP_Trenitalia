@@ -146,6 +146,24 @@ class ErrorMessageTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("non riporta questo treno in circolazione oggi", risposta)
 
 
+class LegacyFormattingTests(unittest.IsolatedAsyncioTestCase):
+    def test_av_platform_label_without_number_is_not_a_platform_change(self):
+        self.assertEqual(server._format_binario("19 AV", " AV"), "bin. 19 AV")
+        self.assertEqual(server._format_binario("19 AV", "18 AV"), "bin. 18 AV (programmato: 19 AV)")
+        self.assertEqual(server._format_binario("3", "4"), "bin. 4 (programmato: 3)")
+        self.assertEqual(server._format_binario("I", "II"), "bin. II (programmato: I)")
+        self.assertEqual(server._format_binario(None, None), "non assegnato")
+
+    async def test_placeholder_last_station_is_reported_as_unavailable(self):
+        dati = {"numeroTreno": 9631, "categoria": "FR", "origine": "MILANO CENTRALE", "destinazione": "ROMA TERMINI",
+                "ritardo": 0, "stazioneUltimoRilevamento": "--", "fermate": []}
+        with patch.dict(server._STAZIONI, DIZIONARIO, clear=True), \
+             patch("server.get_andamento_treno", AsyncMock(return_value=dati)):
+            risposta = await server.trenitalia_traccia_treno(
+                TracciaTrenoInput(numero_treno="9631", id_stazione_origine="S01700"))
+        self.assertIn("**Ultima stazione rilevata**: dato non disponibile", risposta)
+
+
 class BuildStazioniTests(unittest.IsolatedAsyncioTestCase):
     RISPOSTE = {
         "BOLOGNA C.LE": [{"nome": "Bologna C.Le/Av", "id": "S05046"}],

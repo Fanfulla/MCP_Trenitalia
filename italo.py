@@ -25,6 +25,12 @@ def _text(value) -> str | None:
     return unescape(re.sub(r"<[^>]*>", "", str(value))).strip()[:500] or None
 
 
+def _station_name(value: str | None) -> str | None:
+    if not value or value != value.lower():
+        return value
+    return " ".join(word.upper() if word == "av" else word.capitalize() for word in re.split(r"[-\s]+", value) if word)
+
+
 def _minutes(value) -> int | None:
     if value is None or value == "":
         return None
@@ -161,7 +167,7 @@ async def get_station_board(station: str, kind: str = "departures") -> dict:
     response = await get_response(url)
     payload = decode_json(response)
     result = _envelope(payload, response)
-    result.update(station={"id": selected["code"], "name": _text(payload.get("DescrizioneLocalita")) or selected["urlCoding"]}, kind=kind, status="no_results" if payload["IsEmpty"] else "ok", trains=[])
+    result.update(station={"id": selected["code"], "name": _station_name(_text(payload.get("DescrizioneLocalita")) or selected["urlCoding"])}, kind=kind, status="no_results" if payload["IsEmpty"] else "ok", trains=[])
     if payload["IsEmpty"]:
         return result
     rows = payload.get("ListaTreniPartenza" if kind == "departures" else "ListaTreniArrivo")
